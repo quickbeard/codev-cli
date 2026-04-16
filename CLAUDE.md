@@ -14,6 +14,10 @@ Default to using Bun instead of Node.js.
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
 - Bun automatically loads .env, so don't use dotenv.
 
+## React
+
+When writing or reviewing React components, follow the Vercel React best practices defined in `.claude/skills/vercel-react-best-practices/`. Refer to `SKILL.md` for the rule index and read individual rule files in `rules/` for detailed examples.
+
 ## Validation
 
 Always run these commands after making changes and ensure they pass:
