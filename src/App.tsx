@@ -5,13 +5,14 @@ import { setupClaude, type Tool } from "./setup.js";
 
 const VERSION = "0.1.0";
 
-const BANNER = `
- ██████╗  ██████╗ ██████╗  ███████╗██╗   ██╗
-██╔════╝ ██╔═══██╗██╔══██╗ ██╔════╝██║   ██║
-██║      ██║   ██║██║  ██║ █████╗  ██║   ██║
-██║      ██║   ██║██║  ██║ ██╔══╝  ╚██╗ ██╔╝
-╚██████╗ ╚██████╔╝██████╔╝ ███████╗ ╚████╔╝
- ╚═════╝  ╚═════╝ ╚═════╝  ╚══════╝  ╚═══╝`.trimStart();
+const BANNER = [
+	" ██████╗ ██████╗ ██████╗ ███████╗██╗   ██╗",
+	"██╔════╝██╔═══██╗██╔══██╗██╔════╝██║   ██║",
+	"██║     ██║   ██║██║  ██║█████╗  ██║   ██║",
+	"██║     ██║   ██║██║  ██║██╔══╝  ╚██╗ ██╔╝",
+	"╚██████╗╚██████╔╝██████╔╝███████╗ ╚████╔╝ ",
+	" ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝  ╚═══╝  ",
+].join("\n");
 
 type Step = "select" | "installing" | "done";
 
@@ -80,7 +81,7 @@ export function App() {
 					<Text color="yellow">Step 1/2</Text>
 					{" — Select Tool to Install"}
 				</Text>
-				<Text dimColor marginTop={1}>
+				<Text dimColor>
 					{"\n"}Choose which coding agent(s) to install and configure.
 				</Text>
 				<Text dimColor>

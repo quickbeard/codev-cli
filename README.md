@@ -1,21 +1,40 @@
-# bun-react-template
+# codev-cli
 
-To install dependencies:
+A CLI tool to install and configure coding agents (Claude Code, OpenCode).
+
+## Install
+
+```bash
+npm install -g codev-cli
+```
+
+Then run:
+
+```bash
+codev
+```
+
+## Development
 
 ```bash
 bun install
-```
-
-To start a development server:
-
-```bash
 bun dev
 ```
 
-To run for production:
+## Build
 
 ```bash
-bun start
+bun run build
 ```
 
-This project was created using `bun init` in bun v1.3.11. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+The bundled CLI is output to `dist/index.js`. Test it with:
+
+```bash
+node dist/index.js
+```
+
+## Lint & Format
+
+```bash
+bun run fix
+```
