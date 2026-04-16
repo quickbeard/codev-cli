@@ -169,15 +169,14 @@ async function exchangeCode(
 		throw new Error(`Token exchange failed (${res.status}): ${body}`);
 	}
 
-	return res.json();
+	return (await res.json()) as {
+		access_token: string;
+		id_token: string;
+		expires_in: number;
+	};
 }
 
-async function fetchUserInfo(accessToken: string): Promise<{
-	sub: string;
-	email: string;
-	displayName?: string;
-	name?: string;
-}> {
+async function fetchUserInfo(accessToken: string) {
 	const res = await fetch(`${SSO_BASE_URL}/userinfo`, {
 		headers: { Authorization: `Bearer ${accessToken}` },
 	});
@@ -187,7 +186,12 @@ async function fetchUserInfo(accessToken: string): Promise<{
 		throw new Error(`Failed to fetch user info (${res.status}): ${body}`);
 	}
 
-	return res.json();
+	return (await res.json()) as {
+		sub: string;
+		email: string;
+		displayName?: string;
+		name?: string;
+	};
 }
 
 function openBrowser(url: string) {
