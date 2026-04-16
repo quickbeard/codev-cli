@@ -27,10 +27,10 @@ bun dev
 bun run build
 ```
 
-The bundled CLI is output to `dist/index.js`. Test it with:
+The bundled CLI is output to `dist/index.js`. Run it with:
 
 ```bash
-node dist/index.js
+bun start
 ```
 
 ## Lint & Format

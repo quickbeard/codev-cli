@@ -11,6 +11,7 @@
 	"scripts": {
 		"dev": "bun --hot src/index.tsx",
 		"build": "bun build.ts",
+		"start": "node dist/index.js",
 		"fix": "bunx --bun @biomejs/biome check --write"
 	},
 	"dependencies": {
