@@ -5,7 +5,10 @@ import { dirname, join } from "node:path";
 
 const SSO_BASE_URL = "https://netmind.viettel.vn/sso-wrapper";
 const CLIENT_ID = "litellm-test";
-const AUTH_FILE = join(homedir(), ".codev", "auth.json");
+
+function authFilePath() {
+	return join(homedir(), ".codev", "auth.json");
+}
 
 export interface AuthData {
 	access_token: string;
@@ -20,7 +23,7 @@ export interface AuthData {
 
 export function loadAuth(): AuthData | null {
 	try {
-		const raw = readFileSync(AUTH_FILE, "utf-8");
+		const raw = readFileSync(authFilePath(), "utf-8");
 		const data: AuthData = JSON.parse(raw);
 		if (Date.now() > data.expires_at) return null;
 		return data;
@@ -30,8 +33,8 @@ export function loadAuth(): AuthData | null {
 }
 
 function saveAuth(data: AuthData) {
-	mkdirSync(dirname(AUTH_FILE), { recursive: true });
-	writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2));
+	mkdirSync(dirname(authFilePath()), { recursive: true });
+	writeFileSync(authFilePath(), JSON.stringify(data, null, 2));
 }
 
 /**

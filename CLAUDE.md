@@ -37,6 +37,8 @@ import { Banner } from "../components/Banner.js";
 Always run these commands after making changes and ensure they pass:
 
 - `bun run fix` — lint and format with Biome
+- `bun run typecheck` — type-check with TypeScript
+- `bun test` — run tests
 - `bun run build` — bundle the CLI for distribution
 
 ## APIs
