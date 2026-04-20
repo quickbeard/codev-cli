@@ -7,6 +7,7 @@
     "start": "bun src/index.ts",
     "test": "bun test",
     "typecheck": "bunx --bun tsc --noEmit",
+    "check": "bunx --bun @biomejs/biome check",
     "fix": "bunx --bun @biomejs/biome check --write"
   },
   "devDependencies": {

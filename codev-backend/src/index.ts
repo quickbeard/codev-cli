@@ -16,7 +16,7 @@ function extractBearer(req: Request): string | null {
 	return match?.[1] ?? null;
 }
 
-async function handleExchange(req: Request): Promise<Response> {
+export async function handleExchange(req: Request): Promise<Response> {
 	console.log("[exchange] incoming request");
 	const token = extractBearer(req);
 	if (!token) {
@@ -51,19 +51,21 @@ async function handleExchange(req: Request): Promise<Response> {
 	}
 }
 
-const server = Bun.serve({
-	port: config.port,
-	routes: {
-		"/health": () => json({ status: "ok" }),
-		"/auth/exchange": {
-			POST: handleExchange,
+if (import.meta.main) {
+	const server = Bun.serve({
+		port: config.port,
+		routes: {
+			"/health": () => json({ status: "ok" }),
+			"/auth/exchange": {
+				POST: handleExchange,
+			},
 		},
-	},
-	fetch() {
-		return json({ error: "Not found" }, 404);
-	},
-});
+		fetch() {
+			return json({ error: "Not found" }, 404);
+		},
+	});
 
-console.log(
-	`codev-backend listening on http://${server.hostname}:${server.port}`,
-);
+	console.log(
+		`codev-backend listening on http://${server.hostname}:${server.port}`,
+	);
+}

@@ -14,6 +14,7 @@
     "start": "node dist/index.js",
     "test": "bun test",
     "typecheck": "bunx --bun tsc --noEmit",
+    "check": "bunx --bun @biomejs/biome check",
     "fix": "bunx --bun @biomejs/biome check --write"
   },
   "dependencies": {
