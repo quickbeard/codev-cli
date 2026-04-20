@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -21,5 +21,6 @@ export async function setupClaude() {
 		writeFileSync(claudeJsonPath, JSON.stringify(config, null, 2), {
 			mode: 0o600,
 		});
+		chmodSync(claudeJsonPath, 0o600);
 	}
 }

@@ -1,10 +1,17 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	mkdirSync,
+	readFileSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 const SSO_BASE_URL = "https://netmind.viettel.vn/sso-wrapper";
 const CLIENT_ID = "litellm-test";
+const REVOKE_TIMEOUT_MS = 3_000;
 
 function authFilePath() {
 	return join(homedir(), ".codev", "auth.json");
@@ -45,16 +52,58 @@ export function loadAuth(): AuthData | null {
 }
 
 function saveAuth(data: AuthData) {
-	mkdirSync(dirname(authFilePath()), { recursive: true, mode: 0o700 });
-	writeFileSync(authFilePath(), JSON.stringify(data, null, 2), { mode: 0o600 });
+	const path = authFilePath();
+	const dir = dirname(path);
+	mkdirSync(dir, { recursive: true, mode: 0o700 });
+	// mkdirSync's mode is ignored when the directory already exists, and
+	// writeFileSync's mode is ignored when the file already exists, so
+	// re-apply permissions explicitly to tighten any pre-existing loose perms.
+	chmodSync(dir, 0o700);
+	writeFileSync(path, JSON.stringify(data, null, 2), { mode: 0o600 });
+	chmodSync(path, 0o600);
 }
 
-export function logout(): boolean {
+export async function logout(): Promise<boolean> {
+	const data = readAuthFile();
 	try {
 		unlinkSync(authFilePath());
-		return true;
 	} catch {
 		return false;
+	}
+	if (data) {
+		await revokeTokens(data).catch(() => {});
+	}
+	return true;
+}
+
+async function revokeTokens(data: AuthData): Promise<void> {
+	const endpoint = `${SSO_BASE_URL}/revoke`;
+	await Promise.all([
+		revokeToken(endpoint, data.access_token, "access_token"),
+		data.refresh_token
+			? revokeToken(endpoint, data.refresh_token, "refresh_token")
+			: Promise.resolve(),
+	]);
+}
+
+async function revokeToken(
+	endpoint: string,
+	token: string,
+	tokenTypeHint: "access_token" | "refresh_token",
+): Promise<void> {
+	try {
+		await fetch(endpoint, {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				token,
+				token_type_hint: tokenTypeHint,
+				client_id: CLIENT_ID,
+			}),
+			signal: AbortSignal.timeout(REVOKE_TIMEOUT_MS),
+		});
+	} catch {
+		// Best-effort; token will expire naturally if revocation fails.
 	}
 }
 
@@ -83,8 +132,8 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
  * 1. Reuse cached tokens if still valid
  * 2. Try a silent refresh if a refresh_token is on disk
  * 3. Otherwise: start a loopback HTTP server, send the user to /authorize
- *    with state + PKCE, wait for the callback, exchange code for tokens,
- *    fetch userinfo, and persist to ~/.codev/auth.json
+ *    with state + nonce + PKCE, wait for the callback, exchange code for
+ *    tokens, fetch userinfo, and persist to ~/.codev/auth.json
  */
 export async function login(
 	onLog: (msg: string) => void,
@@ -103,12 +152,17 @@ export async function login(
 		try {
 			onLog("Refreshing session...");
 			const refreshed = await refreshTokens(stale.refresh_token);
+			const user = await fetchUserInfo(refreshed.access_token);
 			const authData: AuthData = {
 				access_token: refreshed.access_token,
 				id_token: refreshed.id_token,
 				refresh_token: refreshed.refresh_token || stale.refresh_token,
 				expires_at: Date.now() + refreshed.expires_in * 1000,
-				user: stale.user,
+				user: {
+					sub: user.sub,
+					email: user.email,
+					displayName: user.displayName || user.name || user.sub,
+				},
 			};
 			saveAuth(authData);
 			onLog(`Logged in as ${authData.user.email}`);
@@ -121,12 +175,14 @@ export async function login(
 	const verifier = generateCodeVerifier();
 	const challenge = await generateCodeChallenge(verifier);
 	const state = crypto.randomUUID();
+	const nonce = crypto.randomUUID();
 
 	const { code, redirectUri } = await getAuthCode(
 		onLog,
 		onReady,
 		state,
 		challenge,
+		nonce,
 	);
 
 	const tokenRes = await exchangeCode(code, redirectUri, verifier);
@@ -154,6 +210,7 @@ async function getAuthCode(
 	onReady: (openBrowserFn: () => void) => void,
 	expectedState: string,
 	codeChallenge: string,
+	nonce: string,
 ): Promise<{ code: string; redirectUri: string }> {
 	return new Promise((resolve, reject) => {
 		const server = Bun.serve({
@@ -215,6 +272,7 @@ async function getAuthCode(
 			`&redirect_uri=${encodeURIComponent(redirectUri)}` +
 			`&scope=openid%20profile%20email%20offline_access` +
 			`&state=${expectedState}` +
+			`&nonce=${nonce}` +
 			`&code_challenge=${codeChallenge}` +
 			`&code_challenge_method=S256`;
 

@@ -6,11 +6,8 @@ import { logout } from "@/auth.js";
 const command = process.argv[2];
 
 if (command === "logout") {
-	if (logout()) {
-		console.log("Logged out.");
-	} else {
-		console.log("Not logged in.");
-	}
+	const ok = await logout();
+	console.log(ok ? "Logged out." : "Not logged in.");
 	process.exit(0);
 }
 

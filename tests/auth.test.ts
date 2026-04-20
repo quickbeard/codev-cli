@@ -21,6 +21,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AuthData, loadAuth, login, logout } from "@/auth.js";
 
+const SSO_BASE_URL = "https://netmind.viettel.vn/sso-wrapper";
+const REVOCATION_ENDPOINT = `${SSO_BASE_URL}/revoke`;
+
 let tempDir: string;
 let homedirSpy: ReturnType<typeof spyOn>;
 
@@ -56,6 +59,21 @@ function writeAuthFile(data: AuthData) {
 	writeFileSync(join(dir, "auth.json"), JSON.stringify(data, null, 2));
 }
 
+function mockAuthFetch(
+	handlers: Partial<Record<string, (url: string) => Promise<Response>>> = {},
+) {
+	const originalFetch = globalThis.fetch;
+	return spyOn(globalThis, "fetch").mockImplementation((async (
+		input: string | URL | Request,
+	) => {
+		const url = typeof input === "string" ? input : (input as Request).url;
+		for (const [key, handler] of Object.entries(handlers)) {
+			if (handler && url.includes(key)) return handler(url);
+		}
+		return originalFetch(input);
+	}) as typeof fetch);
+}
+
 describe("loadAuth", () => {
 	test("returns auth data when file exists and is not expired", () => {
 		writeAuthFile(VALID_AUTH);
@@ -86,15 +104,48 @@ describe("loadAuth", () => {
 });
 
 describe("logout", () => {
-	test("removes the auth file", () => {
+	let fetchSpy: ReturnType<typeof spyOn>;
+
+	beforeEach(() => {
+		fetchSpy = mockAuthFetch({
+			[REVOCATION_ENDPOINT]: async () => new Response("", { status: 200 }),
+		});
+	});
+
+	afterEach(() => {
+		fetchSpy.mockRestore();
+	});
+
+	test("removes the auth file", async () => {
 		writeAuthFile(VALID_AUTH);
 		expect(loadAuth()).not.toBeNull();
-		expect(logout()).toBe(true);
+		expect(await logout()).toBe(true);
 		expect(loadAuth()).toBeNull();
 	});
 
-	test("returns false when no auth file exists", () => {
-		expect(logout()).toBe(false);
+	test("returns false when no auth file exists", async () => {
+		expect(await logout()).toBe(false);
+	});
+
+	test("posts to revocation endpoint for access_token and refresh_token", async () => {
+		writeAuthFile({ ...VALID_AUTH, refresh_token: "test-refresh" });
+		await logout();
+
+		const revokeCalls = fetchSpy.mock.calls.filter((c: unknown[]) =>
+			String(c[0]).includes("/revoke"),
+		);
+		expect(revokeCalls.length).toBe(2);
+
+		const bodies = revokeCalls.map(
+			(c: unknown[]) =>
+				(c[1] as RequestInit | undefined)?.body?.toString() ?? "",
+		);
+		expect(
+			bodies.some((b: string) => b.includes("token_type_hint=access_token")),
+		).toBe(true);
+		expect(
+			bodies.some((b: string) => b.includes("token_type_hint=refresh_token")),
+		).toBe(true);
 	});
 });
 
@@ -133,20 +184,25 @@ describe("login", () => {
 	});
 });
 
-function getCallbackPort(spy: ReturnType<typeof spyOn>): number {
+function getAuthorizeUrl(spy: ReturnType<typeof spyOn>): URL | null {
 	const call = spy.mock.calls[0];
-	if (!call) return 0;
-	const authorizeUrl = new URL(call[1]?.[0] as string);
-	const redirectUri = authorizeUrl.searchParams.get("redirect_uri");
+	if (!call) return null;
+	return new URL(call[1]?.[0] as string);
+}
+
+function getCallbackPort(spy: ReturnType<typeof spyOn>): number {
+	const authorizeUrl = getAuthorizeUrl(spy);
+	const redirectUri = authorizeUrl?.searchParams.get("redirect_uri");
 	if (!redirectUri) return 0;
 	return Number.parseInt(new URL(redirectUri).port, 10);
 }
 
 function getCallbackState(spy: ReturnType<typeof spyOn>): string {
-	const call = spy.mock.calls[0];
-	if (!call) return "";
-	const authorizeUrl = new URL(call[1]?.[0] as string);
-	return authorizeUrl.searchParams.get("state") ?? "";
+	return getAuthorizeUrl(spy)?.searchParams.get("state") ?? "";
+}
+
+function getCallbackNonce(spy: ReturnType<typeof spyOn>): string {
+	return getAuthorizeUrl(spy)?.searchParams.get("nonce") ?? "";
 }
 
 describe("login full OAuth flow", () => {
@@ -155,35 +211,26 @@ describe("login full OAuth flow", () => {
 	const originalFetch = globalThis.fetch;
 
 	function mockSsoFetch() {
-		fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (
-			input: string | URL | Request,
-		) => {
-			const url = typeof input === "string" ? input : (input as Request).url;
-
-			if (url.includes("/token")) {
-				return new Response(
+		fetchSpy = mockAuthFetch({
+			"/token": async () =>
+				new Response(
 					JSON.stringify({
 						access_token: "flow-access-token",
 						id_token: "flow-id-token",
 						expires_in: 3600,
 					}),
 					{ headers: { "Content-Type": "application/json" } },
-				);
-			}
-
-			if (url.includes("/userinfo")) {
-				return new Response(
+				),
+			"/userinfo": async () =>
+				new Response(
 					JSON.stringify({
 						sub: "flowuser",
 						email: "flow@viettel.com.vn",
 						displayName: "Flow User",
 					}),
 					{ headers: { "Content-Type": "application/json" } },
-				);
-			}
-
-			return originalFetch(input);
-		}) as typeof fetch);
+				),
+		});
 	}
 
 	beforeEach(() => {
@@ -227,7 +274,33 @@ describe("login full OAuth flow", () => {
 		expect(logs.some((l) => l.includes("Logged in as"))).toBe(true);
 	});
 
+	test("authorize URL includes nonce", async () => {
+		mockSsoFetch();
+
+		const loginPromise = login(
+			() => {},
+			(openBrowserFn) => {
+				openBrowserFn();
+				const port = getCallbackPort(execFileSpy);
+				const state = getCallbackState(execFileSpy);
+				setTimeout(() => {
+					originalFetch(
+						`http://localhost:${port}/callback?code=c&state=${state}`,
+					);
+				}, 50);
+			},
+		);
+
+		await loginPromise;
+
+		const nonce = getCallbackNonce(execFileSpy);
+		expect(nonce).toMatch(
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+		);
+	});
+
 	test("rejects when callback receives an error", async () => {
+		mockSsoFetch();
 		const loginPromise = login(
 			() => {},
 			(openBrowserFn) => {
@@ -245,6 +318,7 @@ describe("login full OAuth flow", () => {
 	});
 
 	test("rejects when callback state does not match", async () => {
+		mockSsoFetch();
 		const loginPromise = login(
 			() => {},
 			(openBrowserFn) => {
@@ -262,6 +336,7 @@ describe("login full OAuth flow", () => {
 	});
 
 	test("rejects when callback receives no code", async () => {
+		mockSsoFetch();
 		const loginPromise = login(
 			() => {},
 			(openBrowserFn) => {
@@ -277,6 +352,7 @@ describe("login full OAuth flow", () => {
 	});
 
 	test("callback server returns 404 for non-callback paths", async () => {
+		mockSsoFetch();
 		let callbackPort = 0;
 
 		const loginPromise = login(
@@ -326,6 +402,7 @@ describe("login full OAuth flow", () => {
 	});
 
 	test("callback server returns error HTML on error", async () => {
+		mockSsoFetch();
 		let callbackRes: Response | null = null;
 
 		const loginPromise = login(
