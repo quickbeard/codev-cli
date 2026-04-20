@@ -301,11 +301,21 @@ function openBrowser(url: string) {
 	execFile(cmd, [url]);
 }
 
+function escapeHtml(str: string): string {
+	return str
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
+}
+
 function loginResultHtml(success: boolean, error?: string): string {
 	const title = success ? "Login Successful" : "Login Failed";
+	const safeError = error ? escapeHtml(error) : "Unknown error";
 	const message = success
 		? "You have been logged in. You can close this tab and return to the terminal."
-		: `Login failed: ${error}. Please try again.`;
+		: `Login failed: ${safeError}. Please try again.`;
 	const color = success ? "#22c55e" : "#ef4444";
 
 	return `<!DOCTYPE html>

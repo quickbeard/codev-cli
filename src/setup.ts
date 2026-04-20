@@ -18,6 +18,8 @@ export async function setupClaude() {
 
 	if (!config.hasCompletedOnboarding) {
 		config.hasCompletedOnboarding = true;
-		writeFileSync(claudeJsonPath, JSON.stringify(config, null, 2));
+		writeFileSync(claudeJsonPath, JSON.stringify(config, null, 2), {
+			mode: 0o600,
+		});
 	}
 }
