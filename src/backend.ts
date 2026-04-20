@@ -1,5 +1,3 @@
-const DEFAULT_BACKEND_URL = "http://localhost:8787";
-
 interface ExchangeResponse {
 	api_key: string;
 	user: {
@@ -14,10 +12,11 @@ interface ErrorResponse {
 }
 
 function backendUrl(): string {
-	return (process.env.CODEV_BACKEND_URL || DEFAULT_BACKEND_URL).replace(
-		/\/$/,
-		"",
-	);
+	const url = process.env.BACKEND_URL;
+	if (!url) {
+		throw new Error("Missing required env var: BACKEND_URL");
+	}
+	return url.replace(/\/$/, "");
 }
 
 export async function fetchApiKey(accessToken: string): Promise<string> {

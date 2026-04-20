@@ -24,11 +24,11 @@ export function Login({ onDone }: LoginProps) {
 			setWaitingForEnter(true);
 		})
 			.then(async (auth) => {
-				addLog("Fetching API key from CoDev backend...");
+				addLog("Fetching API key from backend...");
 				const key = await fetchApiKey(auth.access_token);
 				setApiKey(key);
 				addLog("API key ready.");
-				setTimeout(onDone, 30_000);
+				setTimeout(onDone, 2000);
 			})
 			.catch((err: Error) => setError(err.message));
 	}, [addLog, onDone]);
@@ -59,9 +59,12 @@ export function Login({ onDone }: LoginProps) {
 			{apiKey && (
 				<Box flexDirection="column" marginTop={1}>
 					<Text bold color="green">
-						{"  ✅ Your LiteLLM API key (copy this):"}
+						{"  ✅ Your API key:"}
 					</Text>
 					<Text color="cyan">{`     ${apiKey}`}</Text>
+					<Text bold color="magenta">
+						{"  🎉 Happy coding!"}
+					</Text>
 				</Box>
 			)}
 			{error && <Text color="red">{`  Login failed: ${error}`}</Text>}
