@@ -1,9 +1,9 @@
-# codev-backend
+# codev-proxy
 
-Thin proxy between the `codev-cli` and the LiteLLM proxy.
+Token-exchange service between `codev-cli` and the LiteLLM gateway.
 
 The CLI owns the full OIDC / PKCE flow with Viettel SSO. Once it has an access
-token, it calls this backend to exchange that token for a LiteLLM API key.
+token, it calls this proxy to exchange that token for a LiteLLM API key.
 
 ## Flow
 
@@ -11,17 +11,19 @@ token, it calls this backend to exchange that token for a LiteLLM API key.
 codev-cli  ──(1) POST /auth/exchange  Authorization: Bearer <sso_access_token>
               │
               ▼
-codev-backend ──(2) GET  {SSO_USERINFO_URL}  (verify token, read sub + email)
+codev-proxy  ──(2) GET  {SSO_USERINFO_URL}  (verify token, read sub + email)
               │
               ▼
-              ──(3) GET  {API_URL}/user/info?user_id=<sub>
-              │         └─ if user+key exists, reuse it
-              │         └─ otherwise POST /user/new (or /key/generate)
+              ──(3) POST {API_URL}  Authorization: Bearer {AUTH_TOKEN}
+              │         Body: { "username": "<email>" }
+              │         Response: { "key_token": "sk-..." }
               ▼
 codev-cli   ◀──  { api_key, user }
 ```
 
-The backend never generates a new LiteLLM key for a user who already has one.
+`API_URL` is a single gateway endpoint (not a base URL). Key reuse for
+existing users is the gateway's responsibility — the proxy makes one call
+per exchange and trusts the gateway to return the existing key.
 
 ## Endpoints
 
@@ -43,6 +45,7 @@ Responses:
   ```
 - `401 Unauthorized` — missing or invalid SSO token.
 - `502 Bad Gateway` — LiteLLM or SSO provider failure.
+- `504 Gateway Timeout` — upstream SSO or gateway call timed out.
 
 ### `GET /health`
 
@@ -88,7 +91,7 @@ Tag every image with a version **and** the git SHA. Don't push `:latest` for pro
 ```bash
 VERSION=0.1.0
 SHA=$(git rev-parse --short HEAD)
-REPO=your-dockerhub-org/codev-backend
+REPO=your-dockerhub-org/codev-proxy
 
 docker build -t $REPO:$VERSION -t $REPO:$SHA .
 ```
@@ -103,7 +106,7 @@ docker push $REPO:$SHA
 
 ### 3. What to hand DevOps
 
-- The image reference: `your-dockerhub-org/codev-backend:0.1.0`
+- The image reference: `your-dockerhub-org/codev-proxy:0.1.0`
 - The env var table above (they need to populate **required** vars; route **secret** ones through their secret store)
 - The health check endpoint: `GET /health`
 - The listening port: `8787` (or whatever `PORT` is set to)
@@ -113,7 +116,7 @@ docker push $REPO:$SHA
 **Never** bake `.env` into the image — `.dockerignore` already excludes it. DevOps should inject at runtime using whichever pattern fits their platform:
 
 - **Kubernetes** — non-secrets in a `ConfigMap`, secrets in a `Secret`, both mounted via `envFrom:` on the Deployment. Wire the `/health` endpoint to `livenessProbe` and `readinessProbe`.
-- **Plain docker / systemd** — `docker run --env-file /etc/codev-backend/env ...` with the file owned `root:root` and `chmod 600`, or a systemd unit with `EnvironmentFile=`.
+- **Plain docker / systemd** — `docker run --env-file /etc/codev-proxy/env ...` with the file owned `root:root` and `chmod 600`, or a systemd unit with `EnvironmentFile=`.
 - **Docker Swarm** — `docker secret` for `AUTH_TOKEN`, standard env for the rest.
 - **HashiCorp Vault / AWS Secrets Manager / Azure Key Vault** — inject via agent or init container at container start.
 

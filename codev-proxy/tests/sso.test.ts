@@ -100,6 +100,20 @@ describe("verifySsoToken", () => {
 		await expect(verifySsoToken("t")).rejects.toThrow("missing sub or email");
 	});
 
+	test("throws SsoError(504) when the userinfo fetch times out", async () => {
+		spyOn(globalThis, "fetch").mockRejectedValue(
+			new DOMException("The operation timed out.", "TimeoutError"),
+		);
+		try {
+			await verifySsoToken("t");
+			throw new Error("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(SsoError);
+			expect((err as SsoError).status).toBe(504);
+			expect((err as SsoError).message).toContain("timed out");
+		}
+	});
+
 	test("sends Authorization: Bearer <token> to the userinfo endpoint", async () => {
 		const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
 			new Response(JSON.stringify({ sub: "u", email: "e@v.com" }), {

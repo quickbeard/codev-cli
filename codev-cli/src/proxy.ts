@@ -11,16 +11,10 @@ interface ErrorResponse {
 	error?: string;
 }
 
-function backendUrl(): string {
-	const url = process.env.BACKEND_URL;
-	if (!url) {
-		throw new Error("Missing required env var: BACKEND_URL");
-	}
-	return url.replace(/\/$/, "");
-}
+const PROXY_URL = "http://localhost:8787";
 
 export async function fetchApiKey(accessToken: string): Promise<string> {
-	const res = await fetch(`${backendUrl()}/auth/exchange`, {
+	const res = await fetch(`${PROXY_URL}/auth/exchange`, {
 		method: "POST",
 		headers: { Authorization: `Bearer ${accessToken}` },
 	});
@@ -28,12 +22,12 @@ export async function fetchApiKey(accessToken: string): Promise<string> {
 	if (!res.ok) {
 		const body = (await res.json().catch(() => ({}))) as ErrorResponse;
 		const reason = body.error || res.statusText;
-		throw new Error(`Backend /auth/exchange failed (${res.status}): ${reason}`);
+		throw new Error(`Proxy /auth/exchange failed (${res.status}): ${reason}`);
 	}
 
 	const data = (await res.json()) as ExchangeResponse;
 	if (!data.api_key) {
-		throw new Error("Backend returned no api_key");
+		throw new Error("Proxy returned no api_key");
 	}
 	return data.api_key;
 }

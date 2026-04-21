@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Two independent Bun packages in a single git repo:
 
 - `codev-cli/` — interactive Ink + React CLI. Owns the full OIDC/PKCE login flow with Viettel SSO. Has its own `CLAUDE.md` with CLI-specific conventions (Bun APIs, absolute imports via `@/*`, validation commands) — **read it when working in `codev-cli/`.**
-- `codev-backend/` — Bun HTTP server. Verifies an SSO access token and exchanges it for a LiteLLM API key via a gateway endpoint.
+- `codev-proxy/` — Bun HTTP server. Verifies an SSO access token and exchanges it for a LiteLLM API key via a gateway endpoint.
 
 Each package has its own `package.json`, `bun.lock`, `biome.json`, `tsconfig.json`, and `Dockerfile`. There is no root `package.json` and no workspaces configured — run package scripts from inside each subdir.
 
@@ -37,7 +37,7 @@ CLI-only: `bun run build` (bundles via `build.ts`), `bun run start` (runs the bu
 The login flow crosses both packages — understanding it requires reading files in both.
 
 ```
-codev-cli (src/auth.ts)              codev-backend (src/index.ts)        Gateway
+codev-cli (src/auth.ts)              codev-proxy (src/index.ts)          Gateway
 ─────────────────────────            ─────────────────────────           ───────
  login()
  │
@@ -49,7 +49,7 @@ codev-cli (src/auth.ts)              codev-backend (src/index.ts)        Gateway
  │  → caches tokens in ~/.codev/auth.json
  │
  └─ fetchApiKey(access_token)
-     POST BACKEND_URL/auth/exchange
+     POST http://localhost:8787/auth/exchange
      Authorization: Bearer <access_token>
                                   │
                                   ▼
@@ -72,11 +72,11 @@ codev-cli (src/auth.ts)              codev-backend (src/index.ts)        Gateway
 
 Key invariants across the boundary:
 
-- **The CLI is the SSO client, not the backend.** All OIDC/PKCE state, tokens, and the loopback callback server live in `codev-cli/src/auth.ts`. The backend only verifies the access token via `/userinfo`.
-- **The "gateway" is a single endpoint, not the LiteLLM admin API.** `API_URL` is a full URL (e.g. `https://netmind.viettel.vn/gateway/add_user_and_generate_key`), not a base. The backend posts `{ username }` and reads `key_token` from the response (with fallback to `api_key`/`key`/`token`).
-- **Key reuse is the gateway's responsibility.** The backend makes one call per exchange and trusts the gateway to return the existing key for an existing user. Don't add local caching without confirming behavior.
-- **`BACKEND_URL` in the CLI is required, no default.** `codev-cli/src/backend.ts` throws if missing. Users copy `.env.example` to `.env`.
-- **`NODE_ENV` gates key logging on the backend.** In `development`/`staging` (or unset), `/auth/exchange` logs the API key in plaintext for debugging. In `production`, only the email is logged. The backend Dockerfile sets `NODE_ENV=production`.
+- **The CLI is the SSO client, not the proxy.** All OIDC/PKCE state, tokens, and the loopback callback server live in `codev-cli/src/auth.ts`. The proxy only verifies the access token via `/userinfo`.
+- **The "gateway" is a single endpoint, not the LiteLLM admin API.** `API_URL` is a full URL (e.g. `https://netmind.viettel.vn/gateway/add_user_and_generate_key`), not a base. The proxy posts `{ username }` and reads `key_token` from the response (with fallback to `api_key`/`key`/`token`).
+- **Key reuse is the gateway's responsibility.** The proxy makes one call per exchange and trusts the gateway to return the existing key for an existing user. Don't add local caching without confirming behavior.
+- **The CLI's proxy URL is hardcoded.** `codev-cli/src/proxy.ts` targets `http://localhost:8787` as a module constant — the CLI has no runtime env vars and ships no `.env.example`.
+- **`NODE_ENV` gates key logging in the proxy.** In `development`/`staging` (or unset), `/auth/exchange` logs the API key in plaintext for debugging. In `production`, only the email is logged. The proxy's Dockerfile sets `NODE_ENV=production`.
 
 ## Tech conventions shared by both packages
 
@@ -84,10 +84,10 @@ Key invariants across the boundary:
 - TypeScript config is strict with `noUncheckedIndexedAccess` and `verbatimModuleSyntax`.
 - Biome is the only formatter/linter. Tab indentation, double quotes. `bun run fix` before committing.
 - Absolute imports via `@/*` alias resolving to `src/*`. No relative imports across more than one level.
-- `.env` is never committed or baked into Docker images. Each package ships an `.env.example`.
+- `.env` is never committed or baked into Docker images. Only `codev-proxy` uses runtime env vars (and ships an `.env.example`); `codev-cli` hardcodes its config.
 
 ## Deployment
 
-`codev-backend` is designed to be built and pushed to Docker Hub for DevOps to deploy. See `codev-backend/README.md` for the deployment contract: required env vars (with secret flags), tagging strategy, and env var injection patterns for K8s / systemd / Swarm / secret managers.
+`codev-proxy` is designed to be built and pushed to Docker Hub for DevOps to deploy. See `codev-proxy/README.md` for the deployment contract: required env vars (with secret flags), tagging strategy, and env var injection patterns for K8s / systemd / Swarm / secret managers.
 
 `codev-cli` is distributed as an npm package (`bun run build` produces `dist/index.js`, referenced from `package.json`'s `bin` field).

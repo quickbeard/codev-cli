@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, render } from "ink-testing-library";
 import * as auth from "@/auth.js";
-import * as backend from "@/backend.js";
 import { Login } from "@/components/Login.js";
+import * as proxy from "@/proxy.js";
 
 afterEach(() => {
 	cleanup();
@@ -112,7 +112,7 @@ describe("Login", () => {
 				user: { sub: "u", email: "test@viettel.com.vn", displayName: "Test" },
 			}),
 		);
-		spyOn(backend, "fetchApiKey").mockResolvedValue("sk-test-key-123");
+		spyOn(proxy, "fetchApiKey").mockResolvedValue("sk-test-key-123");
 
 		const onDone = mock();
 		const { lastFrame } = render(<Login onDone={onDone} />);
@@ -133,7 +133,7 @@ describe("Login", () => {
 				user: { sub: "u", email: "test@viettel.com.vn", displayName: "Test" },
 			}),
 		);
-		spyOn(backend, "fetchApiKey").mockResolvedValue("sk-test-key-123");
+		spyOn(proxy, "fetchApiKey").mockResolvedValue("sk-test-key-123");
 
 		const onDone = mock();
 		render(<Login onDone={onDone} />);
@@ -145,7 +145,7 @@ describe("Login", () => {
 		expect(onDone).toHaveBeenCalledTimes(1);
 	});
 
-	test("shows error if backend key exchange fails", async () => {
+	test("shows error if proxy key exchange fails", async () => {
 		spyOn(auth, "login").mockImplementation(() =>
 			Promise.resolve({
 				access_token: "access-xyz",
@@ -154,8 +154,8 @@ describe("Login", () => {
 				user: { sub: "u", email: "test@viettel.com.vn", displayName: "Test" },
 			}),
 		);
-		spyOn(backend, "fetchApiKey").mockRejectedValue(
-			new Error("Backend /auth/exchange failed (502): boom"),
+		spyOn(proxy, "fetchApiKey").mockRejectedValue(
+			new Error("Proxy /auth/exchange failed (502): boom"),
 		);
 
 		const onDone = mock();
@@ -164,7 +164,7 @@ describe("Login", () => {
 		await new Promise((r) => setTimeout(r, 100));
 
 		const output = lastFrame() ?? "";
-		expect(output).toContain("Login failed: Backend /auth/exchange failed");
+		expect(output).toContain("Login failed: Proxy /auth/exchange failed");
 		expect(onDone).not.toHaveBeenCalled();
 	});
 });
