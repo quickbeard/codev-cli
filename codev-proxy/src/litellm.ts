@@ -19,14 +19,23 @@ interface KeyResponse {
 
 export async function getOrProvisionKey(user: SsoUser): Promise<string> {
 	const username = user.email;
-	const res = await fetch(config.apiUrl, {
-		method: "POST",
-		headers: {
-			Authorization: `Bearer ${config.authToken}`,
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({ username }),
-	});
+	let res: Response;
+	try {
+		res = await fetch(config.apiUrl, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${config.authToken}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ username }),
+			signal: AbortSignal.timeout(10_000),
+		});
+	} catch (err) {
+		if (err instanceof DOMException && err.name === "TimeoutError") {
+			throw new LiteLlmError("Gateway request timed out", 504);
+		}
+		throw err;
+	}
 	console.log(`[gateway] POST ${config.apiUrl} → ${res.status}`);
 
 	if (!res.ok) {

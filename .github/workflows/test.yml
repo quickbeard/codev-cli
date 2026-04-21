@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [codev-cli, codev-backend]
+        package: [codev-cli, codev-proxy]
     defaults:
       run:
         working-directory: ${{ matrix.package }}

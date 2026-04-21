@@ -84,6 +84,20 @@ describe("getOrProvisionKey", () => {
 		}
 	});
 
+	test("throws LiteLlmError(504) when the gateway fetch times out", async () => {
+		spyOn(globalThis, "fetch").mockRejectedValue(
+			new DOMException("The operation timed out.", "TimeoutError"),
+		);
+		try {
+			await getOrProvisionKey(fakeUser);
+			throw new Error("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(LiteLlmError);
+			expect((err as LiteLlmError).status).toBe(504);
+			expect((err as LiteLlmError).message).toContain("timed out");
+		}
+	});
+
 	test("POSTs { username: email } with Bearer AUTH_TOKEN to API_URL", async () => {
 		const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
 			new Response(JSON.stringify({ key_token: "sk" }), { status: 200 }),

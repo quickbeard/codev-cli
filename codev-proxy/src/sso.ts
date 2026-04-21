@@ -23,9 +23,18 @@ export class SsoError extends Error {
 }
 
 export async function verifySsoToken(accessToken: string): Promise<SsoUser> {
-	const res = await fetch(config.ssoUserinfoUrl, {
-		headers: { Authorization: `Bearer ${accessToken}` },
-	});
+	let res: Response;
+	try {
+		res = await fetch(config.ssoUserinfoUrl, {
+			headers: { Authorization: `Bearer ${accessToken}` },
+			signal: AbortSignal.timeout(10_000),
+		});
+	} catch (err) {
+		if (err instanceof DOMException && err.name === "TimeoutError") {
+			throw new SsoError("SSO userinfo request timed out", 504);
+		}
+		throw err;
+	}
 
 	if (res.status === 401 || res.status === 403) {
 		throw new SsoError("Invalid or expired SSO token", 401);

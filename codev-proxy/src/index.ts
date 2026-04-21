@@ -66,6 +66,6 @@ if (import.meta.main) {
 	});
 
 	console.log(
-		`codev-backend listening on http://${server.hostname}:${server.port}`,
+		`codev-proxy listening on http://${server.hostname}:${server.port}`,
 	);
 }

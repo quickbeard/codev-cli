@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { login } from "@/auth.js";
-import { fetchApiKey } from "@/backend.js";
+import { fetchApiKey } from "@/proxy.js";
 
 interface LoginProps {
 	onDone: () => void;
@@ -24,10 +24,8 @@ export function Login({ onDone }: LoginProps) {
 			setWaitingForEnter(true);
 		})
 			.then(async (auth) => {
-				addLog("Fetching API key from backend...");
 				const key = await fetchApiKey(auth.access_token);
 				setApiKey(key);
-				addLog("API key ready.");
 				setTimeout(onDone, 1000);
 			})
 			.catch((err: Error) => setError(err.message));
