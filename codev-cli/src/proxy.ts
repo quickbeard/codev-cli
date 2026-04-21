@@ -11,7 +11,7 @@ interface ErrorResponse {
 	error?: string;
 }
 
-const PROXY_URL = "http://localhost:8787";
+const PROXY_URL = "https://netmind.viettel.vn/codev-proxy";
 
 export async function fetchApiKey(accessToken: string): Promise<string> {
 	const res = await fetch(`${PROXY_URL}/auth/exchange`, {

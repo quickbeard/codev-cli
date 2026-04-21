@@ -89,11 +89,11 @@ bun run start
 Tag every image with a version **and** the git SHA. Don't push `:latest` for prod — pinning to a concrete tag makes rollbacks trivial.
 
 ```bash
+REPO=your-dockerhub-org/codev-proxy
 VERSION=0.1.0
 SHA=$(git rev-parse --short HEAD)
-REPO=your-dockerhub-org/codev-proxy
 
-docker build -t $REPO:$VERSION -t $REPO:$SHA .
+docker build --platform linux/amd64 -t $REPO:$VERSION -t $REPO:$SHA .
 ```
 
 ### 2. Run

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
@@ -26,7 +27,7 @@ afterEach(() => {
 describe("bypassClaudeLogin", () => {
 	test("creates .claude.json with hasCompletedOnboarding when file does not exist", async () => {
 		const { bypassClaudeLogin } = await import("@/setup.js");
-		await bypassClaudeLogin();
+		bypassClaudeLogin();
 
 		const filePath = join(tempDir, ".claude.json");
 		expect(existsSync(filePath)).toBe(true);
@@ -40,7 +41,7 @@ describe("bypassClaudeLogin", () => {
 		writeFileSync(filePath, JSON.stringify({ someKey: "someValue" }, null, 2));
 
 		const { bypassClaudeLogin } = await import("@/setup.js");
-		await bypassClaudeLogin();
+		bypassClaudeLogin();
 
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
 		expect(config.hasCompletedOnboarding).toBe(true);
@@ -53,7 +54,7 @@ describe("bypassClaudeLogin", () => {
 		writeFileSync(filePath, JSON.stringify(original, null, 2));
 
 		const { bypassClaudeLogin } = await import("@/setup.js");
-		await bypassClaudeLogin();
+		bypassClaudeLogin();
 
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
 		expect(config).toEqual(original);
@@ -64,10 +65,20 @@ describe("bypassClaudeLogin", () => {
 		writeFileSync(filePath, "not valid json{{{");
 
 		const { bypassClaudeLogin } = await import("@/setup.js");
-		await bypassClaudeLogin();
+		bypassClaudeLogin();
 
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
 		expect(config.hasCompletedOnboarding).toBe(true);
+	});
+
+	test("does not create a .claude.json.backup", async () => {
+		const filePath = join(tempDir, ".claude.json");
+		writeFileSync(filePath, JSON.stringify({ someKey: "someValue" }));
+
+		const { bypassClaudeLogin } = await import("@/setup.js");
+		bypassClaudeLogin();
+
+		expect(existsSync(`${filePath}.backup`)).toBe(false);
 	});
 });
 
@@ -94,9 +105,19 @@ describe("configureClaudeCode", () => {
 		});
 	});
 
-	test("merges with existing settings.json preserving unrelated keys and env vars", async () => {
+	test("also runs bypassClaudeLogin (creates .claude.json)", async () => {
+		const { configureClaudeCode } = await import("@/setup.js");
+		configureClaudeCode("sk-abc");
+
+		const claudeJson = join(tempDir, ".claude.json");
+		expect(existsSync(claudeJson)).toBe(true);
+		const config = JSON.parse(readFileSync(claudeJson, "utf-8"));
+		expect(config.hasCompletedOnboarding).toBe(true);
+	});
+
+	test("replaces existing settings.json and backs up the directory", async () => {
 		const dir = join(tempDir, ".claude");
-		const { mkdirSync } = await import("node:fs");
+		const backupDir = join(tempDir, ".claude.backup");
 		mkdirSync(dir, { recursive: true });
 		const filePath = join(dir, "settings.json");
 		writeFileSync(
@@ -106,14 +127,62 @@ describe("configureClaudeCode", () => {
 				env: { FOO: "bar", ANTHROPIC_API_KEY: "old" },
 			}),
 		);
+		writeFileSync(join(dir, "CLAUDE.md"), "user notes");
+
+		const { configureClaudeCode } = await import("@/setup.js");
+		const results = configureClaudeCode("sk-new");
+
+		const dirResult = results.find((r) => r.kind === "claude-dir");
+		expect(dirResult?.backupPath).toBe(backupDir);
+		expect(existsSync(join(backupDir, "settings.json"))).toBe(true);
+		expect(existsSync(join(backupDir, "CLAUDE.md"))).toBe(true);
+
+		const backup = JSON.parse(
+			readFileSync(join(backupDir, "settings.json"), "utf-8"),
+		);
+		expect(backup.otherKey).toBe("keep");
+		expect(backup.env.ANTHROPIC_API_KEY).toBe("old");
+
+		const config = JSON.parse(readFileSync(filePath, "utf-8"));
+		expect(config.otherKey).toBeUndefined();
+		expect(config.env.FOO).toBeUndefined();
+		expect(config.env.ANTHROPIC_API_KEY).toBe("sk-new");
+	});
+
+	test("preserves a pre-existing .claude backup across repeated runs", async () => {
+		const dir = join(tempDir, ".claude");
+		const backupDir = join(tempDir, ".claude.backup");
+		mkdirSync(backupDir, { recursive: true });
+		writeFileSync(join(backupDir, "marker.txt"), "original");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "settings.json"),
+			JSON.stringify({ env: { ANTHROPIC_API_KEY: "prev-codev-run" } }),
+		);
 
 		const { configureClaudeCode } = await import("@/setup.js");
 		configureClaudeCode("sk-new");
 
-		const config = JSON.parse(readFileSync(filePath, "utf-8"));
-		expect(config.otherKey).toBe("keep");
-		expect(config.env.FOO).toBe("bar");
-		expect(config.env.ANTHROPIC_API_KEY).toBe("sk-new");
+		expect(readFileSync(join(backupDir, "marker.txt"), "utf-8")).toBe(
+			"original",
+		);
+	});
+
+	test("overwrites pre-existing .claude backup when claude-dir is in overwriteBackups", async () => {
+		const dir = join(tempDir, ".claude");
+		const backupDir = join(tempDir, ".claude.backup");
+		mkdirSync(backupDir, { recursive: true });
+		writeFileSync(join(backupDir, "stale.txt"), "old");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "fresh.txt"), "new");
+
+		const { configureClaudeCode } = await import("@/setup.js");
+		configureClaudeCode("sk-new", {
+			overwriteBackups: new Set(["claude-dir"]),
+		});
+
+		expect(existsSync(join(backupDir, "stale.txt"))).toBe(false);
+		expect(existsSync(join(backupDir, "fresh.txt"))).toBe(true);
 	});
 });
 
@@ -135,9 +204,16 @@ describe("configureOpenCode", () => {
 		expect(config.provider.netmind.models.MiniMax.name).toBe("MiniMax");
 	});
 
-	test("merges with existing opencode.json preserving unrelated keys and other providers", async () => {
+	test("does not touch ~/.claude.json (OpenCode-only install)", async () => {
+		const { configureOpenCode } = await import("@/setup.js");
+		configureOpenCode("sk-xyz");
+
+		expect(existsSync(join(tempDir, ".claude.json"))).toBe(false);
+	});
+
+	test("replaces existing opencode.json and backs up the directory", async () => {
 		const dir = join(tempDir, ".config", "opencode");
-		const { mkdirSync } = await import("node:fs");
+		const backupDir = join(tempDir, ".config", "opencode.backup");
 		mkdirSync(dir, { recursive: true });
 		const filePath = join(dir, "opencode.json");
 		writeFileSync(
@@ -149,11 +225,42 @@ describe("configureOpenCode", () => {
 		);
 
 		const { configureOpenCode } = await import("@/setup.js");
-		configureOpenCode("sk-new");
+		const results = configureOpenCode("sk-new");
+
+		expect(results[0]?.backupPath).toBe(backupDir);
+		const backup = JSON.parse(
+			readFileSync(join(backupDir, "opencode.json"), "utf-8"),
+		);
+		expect(backup.someSetting).toBe("keep");
+		expect(backup.provider.other.name).toBe("Other");
 
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
-		expect(config.someSetting).toBe("keep");
-		expect(config.provider.other.name).toBe("Other");
+		expect(config.someSetting).toBeUndefined();
+		expect(config.provider.other).toBeUndefined();
 		expect(config.provider.netmind.options.apiKey).toBe("sk-new");
+	});
+});
+
+describe("getBackupStatus", () => {
+	test("returns only claude-dir for claude-code", async () => {
+		const { getBackupStatus } = await import("@/setup.js");
+		const statuses = getBackupStatus("claude-code");
+		expect(statuses.map((s) => s.kind)).toEqual(["claude-dir"]);
+	});
+
+	test("returns opencode-dir for opencode", async () => {
+		const { getBackupStatus } = await import("@/setup.js");
+		const statuses = getBackupStatus("opencode");
+		expect(statuses.map((s) => s.kind)).toEqual(["opencode-dir"]);
+	});
+
+	test("reports hasSource and hasBackup accurately", async () => {
+		mkdirSync(join(tempDir, ".config", "opencode"), { recursive: true });
+		writeFileSync(join(tempDir, ".config", "opencode", "opencode.json"), "{}");
+
+		const { getBackupStatus } = await import("@/setup.js");
+		const [status] = getBackupStatus("opencode");
+		expect(status?.hasSource).toBe(true);
+		expect(status?.hasBackup).toBe(false);
 	});
 });

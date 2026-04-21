@@ -3,11 +3,18 @@ import { Box, Text, useApp } from "ink";
 import { useCallback, useState } from "react";
 import { Banner } from "@/components/Banner.js";
 import { Configure } from "@/components/Configure.js";
+import { Confirm } from "@/components/Confirm.js";
 import { Login } from "@/components/Login.js";
 import { ToolSelect } from "@/components/ToolSelect.js";
-import { bypassClaudeLogin, type Tool } from "@/setup.js";
+import type { Tool } from "@/setup.js";
 
-type Step = "select" | "installing" | "login" | "configuring" | "done";
+type Step =
+	| "select"
+	| "confirm"
+	| "installing"
+	| "login"
+	| "configuring"
+	| "done";
 
 export function App() {
 	const { exit } = useApp();
@@ -16,17 +23,28 @@ export function App() {
 	const [tools, setTools] = useState<Tool[]>([]);
 	const [apiKey, setApiKey] = useState<string | null>(null);
 
-	const addLog = (msg: string) => {
+	const addLog = useCallback((msg: string) => {
 		setLogs((prev) => [...prev, msg]);
-	};
+	}, []);
 
 	const handleConfirm = (selected: Tool[]) => {
 		setTools(selected);
-		setStep("installing");
-		runInstall(selected, addLog).then(() => {
-			setStep("login");
-		});
+		setStep("confirm");
 	};
+
+	const handleConfirmProceed = useCallback(
+		(proceed: boolean) => {
+			if (!proceed) {
+				exit();
+				return;
+			}
+			setStep("installing");
+			runInstall(tools, addLog).then(() => {
+				setStep("login");
+			});
+		},
+		[exit, tools, addLog],
+	);
 
 	const handleLoginDone = useCallback((key: string) => {
 		setApiKey(key);
@@ -41,15 +59,20 @@ export function App() {
 	return (
 		<Box flexDirection="column" padding={1}>
 			<Banner />
-			{step === "select" && <ToolSelect onConfirm={handleConfirm} />}
-			{step !== "select" && (
+			<ToolSelect onConfirm={handleConfirm} readOnly={step !== "select"} />
+			{step === "confirm" && (
+				<Confirm tools={tools} onConfirm={handleConfirmProceed} />
+			)}
+			{step !== "select" && step !== "confirm" && (
 				<Box flexDirection="column" marginTop={1}>
 					{logs.map((log, i) => (
 						<Text key={`log-${i.toString()}`}>{log}</Text>
 					))}
 				</Box>
 			)}
-			{step === "login" && <Login onDone={handleLoginDone} />}
+			{(step === "login" || step === "configuring") && (
+				<Login onDone={handleLoginDone} />
+			)}
 			{step === "configuring" && apiKey && (
 				<Configure tools={tools} apiKey={apiKey} onDone={handleConfigureDone} />
 			)}
@@ -74,6 +97,5 @@ async function runInstall(tools: Tool[], log: (msg: string) => void) {
 		});
 	}
 
-	await bypassClaudeLogin();
 	log("Done!");
 }

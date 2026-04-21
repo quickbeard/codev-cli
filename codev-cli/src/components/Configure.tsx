@@ -1,6 +1,13 @@
-import { Box, Text } from "ink";
-import { useEffect, useState } from "react";
-import { configureClaudeCode, configureOpenCode, type Tool } from "@/setup.js";
+import { Box, Text, useInput } from "ink";
+import { useEffect, useRef, useState } from "react";
+import {
+	type BackupKind,
+	type ConfigureResult,
+	configureClaudeCode,
+	configureOpenCode,
+	getBackupStatus,
+	type Tool,
+} from "@/setup.js";
 
 interface ConfigureProps {
 	tools: Tool[];
@@ -8,42 +15,130 @@ interface ConfigureProps {
 	onDone: () => void;
 }
 
+type Phase = "prompt" | "running" | "done" | "error";
+
+interface Conflict {
+	kind: BackupKind;
+	backupPath: string;
+}
+
+const LABEL: Record<BackupKind, string> = {
+	"claude-dir": "Claude Code",
+	"opencode-dir": "OpenCode",
+};
+
+function scanConflicts(tools: Tool[]): Conflict[] {
+	const out: Conflict[] = [];
+	for (const tool of tools) {
+		for (const s of getBackupStatus(tool)) {
+			if (s.hasSource && s.hasBackup) {
+				out.push({ kind: s.kind, backupPath: s.backupPath });
+			}
+		}
+	}
+	return out;
+}
+
+function describeResult(r: ConfigureResult): string[] {
+	const lines = [`Configured ${LABEL[r.kind]}`];
+	if (r.backupPath) {
+		lines.push(`  Backup: ${r.backupPath}`);
+		lines.push(
+			`  Restore: rm -rf ${r.sourcePath} && mv ${r.backupPath} ${r.sourcePath}`,
+		);
+	}
+	return lines;
+}
+
 export function Configure({ tools, apiKey, onDone }: ConfigureProps) {
+	const [conflicts] = useState(() => scanConflicts(tools));
+	const [phase, setPhase] = useState<Phase>(
+		conflicts.length > 0 ? "prompt" : "running",
+	);
+	const [index, setIndex] = useState(0);
+	const [overwrites, setOverwrites] = useState<Set<BackupKind>>(new Set());
 	const [logs, setLogs] = useState<string[]>([]);
-	const [done, setDone] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const hasRun = useRef(false);
+
+	const current = conflicts[index];
+
+	useInput(
+		(input, key) => {
+			if (!current) return;
+			const answer = input.toLowerCase();
+			let keep = false;
+			if (answer === "y") {
+				keep = false;
+			} else if (answer === "n" || key.return) {
+				keep = true;
+			} else {
+				return;
+			}
+			if (!keep) {
+				setOverwrites((prev) => {
+					const next = new Set(prev);
+					next.add(current.kind);
+					return next;
+				});
+			}
+			const nextIdx = index + 1;
+			if (nextIdx >= conflicts.length) {
+				setPhase("running");
+			} else {
+				setIndex(nextIdx);
+			}
+		},
+		{ isActive: phase === "prompt" },
+	);
 
 	useEffect(() => {
-		const next: string[] = [];
+		if (phase !== "running" || hasRun.current) return;
+		hasRun.current = true;
 		try {
+			const results: ConfigureResult[] = [];
+			const opts = { overwriteBackups: overwrites };
 			for (const tool of tools) {
 				if (tool === "claude-code") {
-					configureClaudeCode(apiKey);
-					next.push("Configured Claude Code (~/.claude/settings.json)");
+					results.push(...configureClaudeCode(apiKey, opts));
 				} else if (tool === "opencode") {
-					configureOpenCode(apiKey);
-					next.push("Configured OpenCode (~/.config/opencode/opencode.json)");
+					results.push(...configureOpenCode(apiKey, opts));
 				}
 			}
+			const next: string[] = [];
+			for (const r of results) {
+				next.push(...describeResult(r));
+			}
 			setLogs(next);
-			setDone(true);
+			setPhase("done");
 			setTimeout(onDone, 1000);
 		} catch (err) {
 			setError((err as Error).message);
+			setPhase("error");
 		}
-	}, [tools, apiKey, onDone]);
+	}, [phase, tools, apiKey, overwrites, onDone]);
 
 	return (
 		<Box flexDirection="column" marginTop={1}>
 			<Text bold>
-				{"⚙️  "}
+				{"⚙️ "}
 				<Text color="yellow">Step 3/3</Text>
 				{" — Configure tools:"}
 			</Text>
+			{phase === "prompt" && current && (
+				<Box flexDirection="column">
+					<Text color="cyan">
+						{`  Backup already exists at ${current.backupPath}`}
+					</Text>
+					<Text color="cyan">
+						{`  Overwrite it with the current ${LABEL[current.kind]} contents? [y/N] (${index + 1}/${conflicts.length})`}
+					</Text>
+				</Box>
+			)}
 			{logs.map((log, i) => (
 				<Text key={`cfg-${i.toString()}`}>{`  ${log}`}</Text>
 			))}
-			{done && (
+			{phase === "done" && (
 				<Box marginTop={1}>
 					<Text bold color="magenta">
 						{"  🎉 Happy coding!"}

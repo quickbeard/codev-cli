@@ -9,34 +9,38 @@ const TOOLS: { label: string; icon: string; value: Tool }[] = [
 
 interface ToolSelectProps {
 	onConfirm: (tools: Tool[]) => void;
+	readOnly?: boolean;
 }
 
-export function ToolSelect({ onConfirm }: ToolSelectProps) {
+export function ToolSelect({ onConfirm, readOnly = false }: ToolSelectProps) {
 	const [cursor, setCursor] = useState(0);
 	const [selected, setSelected] = useState<Set<Tool>>(new Set());
 
-	useInput((input, key) => {
-		if (key.upArrow) {
-			setCursor((c) => Math.max(0, c - 1));
-		} else if (key.downArrow) {
-			setCursor((c) => Math.min(TOOLS.length - 1, c + 1));
-		} else if (input === " ") {
-			setSelected((prev) => {
-				const next = new Set(prev);
-				const tool = TOOLS[cursor];
-				if (!tool) return next;
-				if (next.has(tool.value)) {
-					next.delete(tool.value);
-				} else {
-					next.add(tool.value);
-				}
-				return next;
-			});
-		} else if (key.return) {
-			if (selected.size === 0) return;
-			onConfirm([...selected]);
-		}
-	});
+	useInput(
+		(input, key) => {
+			if (key.upArrow) {
+				setCursor((c) => Math.max(0, c - 1));
+			} else if (key.downArrow) {
+				setCursor((c) => Math.min(TOOLS.length - 1, c + 1));
+			} else if (input === " ") {
+				setSelected((prev) => {
+					const next = new Set(prev);
+					const tool = TOOLS[cursor];
+					if (!tool) return next;
+					if (next.has(tool.value)) {
+						next.delete(tool.value);
+					} else {
+						next.add(tool.value);
+					}
+					return next;
+				});
+			} else if (key.return) {
+				if (selected.size === 0) return;
+				onConfirm([...selected]);
+			}
+		},
+		{ isActive: !readOnly },
+	);
 
 	return (
 		<Box marginTop={1} flexDirection="column">
@@ -45,14 +49,16 @@ export function ToolSelect({ onConfirm }: ToolSelectProps) {
 				<Text color="yellow">Step 1/3</Text>
 				{" — Select the AI agent(s) to install and configure:"}
 			</Text>
-			<Text dimColor>
-				{"\n"}Use ↑/↓ to navigate, Space to select, Enter to confirm
-			</Text>
+			{!readOnly && (
+				<Text dimColor>
+					{"\n"}Use ↑/↓ to navigate, Space to select, Enter to confirm
+				</Text>
+			)}
 			<Box flexDirection="column" marginTop={1}>
 				{TOOLS.map((tool, i) => {
 					const isSelected = selected.has(tool.value);
-					const isCursor = cursor === i;
-					const pointer = isCursor ? "❯" : " ";
+					const isCursor = !readOnly && cursor === i;
+					const pointer = readOnly ? " " : isCursor ? "❯" : " ";
 					return (
 						<Box key={tool.value}>
 							<Text bold color={isCursor ? "yellow" : undefined}>
