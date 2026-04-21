@@ -13,6 +13,7 @@ interface ErrorResponse {
 
 import { BASE_URL } from "@/const.js";
 
+// Use const PROXY_URL = "http://localhost:8787"; for local
 const PROXY_URL = `${BASE_URL}codev-proxy`;
 
 export async function fetchApiKey(accessToken: string): Promise<string> {
