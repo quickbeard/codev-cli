@@ -4,6 +4,7 @@ import { getBackupStatus, type Tool } from "@/setup.js";
 interface ConfirmProps {
 	tools: Tool[];
 	onConfirm: (proceed: boolean) => void;
+	readOnly?: boolean;
 }
 
 const TOOL_LABEL: Record<Tool, string> = {
@@ -16,15 +17,18 @@ const CONFIG_FILE: Record<Tool, string> = {
 	opencode: "opencode.json",
 };
 
-export function Confirm({ tools, onConfirm }: ConfirmProps) {
-	useInput((input, key) => {
-		const answer = input.toLowerCase();
-		if (answer === "y") {
-			onConfirm(true);
-		} else if (answer === "n" || key.return) {
-			onConfirm(false);
-		}
-	});
+export function Confirm({ tools, onConfirm, readOnly = false }: ConfirmProps) {
+	useInput(
+		(input, key) => {
+			const answer = input.toLowerCase();
+			if (answer === "y") {
+				onConfirm(true);
+			} else if (answer === "n" || key.return) {
+				onConfirm(false);
+			}
+		},
+		{ isActive: !readOnly },
+	);
 
 	return (
 		<Box flexDirection="column" marginTop={1}>
@@ -54,9 +58,11 @@ export function Confirm({ tools, onConfirm }: ConfirmProps) {
 					</Box>
 				);
 			})}
-			<Box marginTop={1}>
-				<Text color="cyan">{"  Continue? [y/N]"}</Text>
-			</Box>
+			{!readOnly && (
+				<Box marginTop={1}>
+					<Text color="cyan">{"  Continue? [y/N]"}</Text>
+				</Box>
+			)}
 		</Box>
 	);
 }

@@ -139,7 +139,7 @@ export function Configure({ tools, apiKey, onDone }: ConfigureProps) {
 				<Text key={`cfg-${i.toString()}`}>{`  ${log}`}</Text>
 			))}
 			{phase === "done" && (
-				<Box marginTop={1}>
+				<Box marginTop={1} marginBottom={1}>
 					<Text bold color="magenta">
 						{"  🎉 Happy coding!"}
 					</Text>

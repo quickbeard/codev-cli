@@ -8,8 +8,9 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { BASE_URL } from "@/const.js";
 
-const SSO_BASE_URL = "https://netmind.viettel.vn/sso-wrapper";
+const SSO_BASE_URL = `${BASE_URL}sso-wrapper`;
 const CLIENT_ID = "litellm-test";
 const REVOKE_TIMEOUT_MS = 3_000;
 

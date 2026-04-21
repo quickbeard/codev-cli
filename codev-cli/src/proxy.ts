@@ -11,7 +11,9 @@ interface ErrorResponse {
 	error?: string;
 }
 
-const PROXY_URL = "https://netmind.viettel.vn/codev-proxy";
+import { BASE_URL } from "@/const.js";
+
+const PROXY_URL = `${BASE_URL}codev-proxy`;
 
 export async function fetchApiKey(accessToken: string): Promise<string> {
 	const res = await fetch(`${PROXY_URL}/auth/exchange`, {

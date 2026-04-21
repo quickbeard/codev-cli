@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { BASE_URL } from "@/const.js";
 
 export type Tool = "claude-code" | "opencode";
 export type BackupKind = "claude-dir" | "opencode-dir";
@@ -31,7 +32,7 @@ export interface ConfigureResult {
 	backupPath: string | null;
 }
 
-const GATEWAY_BASE_URL = "https://netmind.viettel.vn/gateway/";
+const GATEWAY_BASE_URL = `${BASE_URL}gateway/`;
 const GATEWAY_OPENAI_BASE_URL = `${GATEWAY_BASE_URL}v1`;
 const MODEL_NAME = "MiniMax";
 

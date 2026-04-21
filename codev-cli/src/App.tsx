@@ -60,8 +60,12 @@ export function App() {
 		<Box flexDirection="column" padding={1}>
 			<Banner />
 			<ToolSelect onConfirm={handleConfirm} readOnly={step !== "select"} />
-			{step === "confirm" && (
-				<Confirm tools={tools} onConfirm={handleConfirmProceed} />
+			{step !== "select" && (
+				<Confirm
+					tools={tools}
+					onConfirm={handleConfirmProceed}
+					readOnly={step !== "confirm"}
+				/>
 			)}
 			{step !== "select" && step !== "confirm" && (
 				<Box flexDirection="column" marginTop={1}>
