@@ -9,13 +9,13 @@ afterEach(() => {
 });
 
 describe("Login", () => {
-	test("renders step 2/2 header", () => {
+	test("renders step 2/3 header", () => {
 		spyOn(auth, "login").mockImplementation(() => new Promise(() => {}));
 		const onDone = mock();
 		const { lastFrame } = render(<Login onDone={onDone} />);
 
 		const output = lastFrame() ?? "";
-		expect(output).toContain("Step 2/2");
+		expect(output).toContain("Step 2/3");
 		expect(output).toContain("Login to Viettel SSO");
 	});
 
@@ -103,28 +103,7 @@ describe("Login", () => {
 		expect(openBrowserFn).not.toHaveBeenCalled();
 	});
 
-	test("shows API key and Happy coding after successful exchange", async () => {
-		spyOn(auth, "login").mockImplementation(() =>
-			Promise.resolve({
-				access_token: "access-xyz",
-				id_token: "id-xyz",
-				expires_at: Date.now() + 3600000,
-				user: { sub: "u", email: "test@viettel.com.vn", displayName: "Test" },
-			}),
-		);
-		spyOn(proxy, "fetchApiKey").mockResolvedValue("sk-test-key-123");
-
-		const onDone = mock();
-		const { lastFrame } = render(<Login onDone={onDone} />);
-
-		await new Promise((r) => setTimeout(r, 100));
-
-		const output = lastFrame() ?? "";
-		expect(output).toContain("sk-test-key-123");
-		expect(output).toContain("Happy coding!");
-	});
-
-	test("calls onDone roughly 1 second after API key is shown", async () => {
+	test("calls onDone with the api key after successful exchange", async () => {
 		spyOn(auth, "login").mockImplementation(() =>
 			Promise.resolve({
 				access_token: "access-xyz",
@@ -138,11 +117,10 @@ describe("Login", () => {
 		const onDone = mock();
 		render(<Login onDone={onDone} />);
 
-		await new Promise((r) => setTimeout(r, 500));
-		expect(onDone).not.toHaveBeenCalled();
+		await new Promise((r) => setTimeout(r, 100));
 
-		await new Promise((r) => setTimeout(r, 700));
 		expect(onDone).toHaveBeenCalledTimes(1);
+		expect(onDone).toHaveBeenCalledWith("sk-test-key-123");
 	});
 
 	test("shows error if proxy key exchange fails", async () => {

@@ -21,7 +21,7 @@ describe("ToolSelect", () => {
 		const { lastFrame } = render(<ToolSelect onConfirm={onConfirm} />);
 
 		const output = lastFrame() ?? "";
-		expect(output).toContain("Step 1/2");
+		expect(output).toContain("Step 1/3");
 		expect(output).toContain("Select the AI agent(s) to install and configure");
 	});
 

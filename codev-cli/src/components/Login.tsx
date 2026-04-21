@@ -4,13 +4,12 @@ import { login } from "@/auth.js";
 import { fetchApiKey } from "@/proxy.js";
 
 interface LoginProps {
-	onDone: () => void;
+	onDone: (apiKey: string) => void;
 }
 
 export function Login({ onDone }: LoginProps) {
 	const [logs, setLogs] = useState<string[]>([]);
 	const [error, setError] = useState<string | null>(null);
-	const [apiKey, setApiKey] = useState<string | null>(null);
 	const [waitingForEnter, setWaitingForEnter] = useState(false);
 	const openBrowserRef = useRef<(() => void) | null>(null);
 
@@ -25,8 +24,7 @@ export function Login({ onDone }: LoginProps) {
 		})
 			.then(async (auth) => {
 				const key = await fetchApiKey(auth.access_token);
-				setApiKey(key);
-				setTimeout(onDone, 1000);
+				onDone(key);
 			})
 			.catch((err: Error) => setError(err.message));
 	}, [addLog, onDone]);
@@ -43,7 +41,7 @@ export function Login({ onDone }: LoginProps) {
 		<Box flexDirection="column" marginTop={1}>
 			<Text bold>
 				{"🔐 "}
-				<Text color="yellow">Step 2/2</Text>
+				<Text color="yellow">Step 2/3</Text>
 				{" — Login to Viettel SSO:"}
 			</Text>
 			{logs.map((log, i) => (
@@ -53,19 +51,6 @@ export function Login({ onDone }: LoginProps) {
 				<Text color="cyan">
 					{"  Press Enter to open the browser and login..."}
 				</Text>
-			)}
-			{apiKey && (
-				<Box flexDirection="column" marginTop={1}>
-					<Text bold color="green">
-						{"  ✅ Your API key:"}
-					</Text>
-					<Text color="cyan">{`     ${apiKey}`}</Text>
-					<Box marginTop={1}>
-						<Text bold color="magenta">
-							{"  🎉 Happy coding!"}
-						</Text>
-					</Box>
-				</Box>
 			)}
 			{error && <Text color="red">{`  Login failed: ${error}`}</Text>}
 		</Box>

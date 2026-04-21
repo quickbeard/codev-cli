@@ -2,29 +2,38 @@ import { execFile } from "node:child_process";
 import { Box, Text, useApp } from "ink";
 import { useCallback, useState } from "react";
 import { Banner } from "@/components/Banner.js";
+import { Configure } from "@/components/Configure.js";
 import { Login } from "@/components/Login.js";
 import { ToolSelect } from "@/components/ToolSelect.js";
-import { setupClaude, type Tool } from "@/setup.js";
+import { bypassClaudeLogin, type Tool } from "@/setup.js";
 
-type Step = "select" | "installing" | "login" | "done";
+type Step = "select" | "installing" | "login" | "configuring" | "done";
 
 export function App() {
 	const { exit } = useApp();
 	const [step, setStep] = useState<Step>("select");
 	const [logs, setLogs] = useState<string[]>([]);
+	const [tools, setTools] = useState<Tool[]>([]);
+	const [apiKey, setApiKey] = useState<string | null>(null);
 
 	const addLog = (msg: string) => {
 		setLogs((prev) => [...prev, msg]);
 	};
 
-	const handleConfirm = (tools: Tool[]) => {
+	const handleConfirm = (selected: Tool[]) => {
+		setTools(selected);
 		setStep("installing");
-		runInstall(tools, addLog).then(() => {
+		runInstall(selected, addLog).then(() => {
 			setStep("login");
 		});
 	};
 
-	const handleLoginDone = useCallback(() => {
+	const handleLoginDone = useCallback((key: string) => {
+		setApiKey(key);
+		setStep("configuring");
+	}, []);
+
+	const handleConfigureDone = useCallback(() => {
 		setStep("done");
 		exit();
 	}, [exit]);
@@ -41,6 +50,9 @@ export function App() {
 				</Box>
 			)}
 			{step === "login" && <Login onDone={handleLoginDone} />}
+			{step === "configuring" && apiKey && (
+				<Configure tools={tools} apiKey={apiKey} onDone={handleConfigureDone} />
+			)}
 		</Box>
 	);
 }
@@ -62,7 +74,6 @@ async function runInstall(tools: Tool[], log: (msg: string) => void) {
 		});
 	}
 
-	log("Configuring .claude.json...");
-	await setupClaude();
+	await bypassClaudeLogin();
 	log("Done!");
 }

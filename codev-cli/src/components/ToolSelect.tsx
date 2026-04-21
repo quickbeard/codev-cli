@@ -42,7 +42,7 @@ export function ToolSelect({ onConfirm }: ToolSelectProps) {
 		<Box marginTop={1} flexDirection="column">
 			<Text bold>
 				{"📋 "}
-				<Text color="yellow">Step 1/2</Text>
+				<Text color="yellow">Step 1/3</Text>
 				{" — Select the AI agent(s) to install and configure:"}
 			</Text>
 			<Text dimColor>
