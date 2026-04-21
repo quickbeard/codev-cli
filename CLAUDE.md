@@ -84,7 +84,7 @@ Key invariants across the boundary:
 - TypeScript config is strict with `noUncheckedIndexedAccess` and `verbatimModuleSyntax`.
 - Biome is the only formatter/linter. Tab indentation, double quotes. `bun run fix` before committing.
 - Absolute imports via `@/*` alias resolving to `src/*`. No relative imports across more than one level.
-- `.env` is never committed or baked into Docker images. Only `codev-proxy` uses runtime env vars (and ships an `.env.example`); `codev-cli` hardcodes its config.
+- `.env` is never committed or baked into Docker images. Only `codev-proxy` uses runtime env vars (and ships an `.env.example`).
 
 ## Deployment
 
