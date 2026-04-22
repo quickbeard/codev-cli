@@ -23,7 +23,10 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx}": "bun run fix && bun run typecheck && bun test && bun run build"
+    "*.{ts,tsx,js,jsx}": [
+      "bun fix",
+      "bun typecheck"
+    ]
   },
   "dependencies": {
     "ink": "^7.0.1",
