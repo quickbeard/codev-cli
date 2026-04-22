@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "ink-testing-library";
 import { Banner } from "@/components/Banner.js";
+import pkg from "../../package.json" with { type: "json" };
 
 afterEach(() => {
 	cleanup();
@@ -26,7 +27,7 @@ describe("Banner", () => {
 		const { lastFrame } = render(<Banner />);
 
 		const output = lastFrame() ?? "";
-		expect(output).toContain("v0.1.0");
+		expect(output).toContain(`v${pkg.version}`);
 	});
 
 	test("renders the separator line", () => {
