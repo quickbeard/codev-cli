@@ -1,0 +1,1 @@
+bun run fix && bun run typecheck && bun test && bun run build

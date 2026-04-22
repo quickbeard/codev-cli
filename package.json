@@ -19,7 +19,8 @@
     "fix": "bunx --bun @biomejs/biome check --write",
     "prepublishOnly": "bun run check && bun run typecheck && bun test && bun run build",
     "prepack": "mv README.md README.repo.md && mv README.npm.md README.md",
-    "postpack": "mv README.md README.npm.md && mv README.repo.md README.md"
+    "postpack": "mv README.md README.npm.md && mv README.repo.md README.md",
+    "prepare": "husky"
   },
   "dependencies": {
     "ink": "^7.0.1",
@@ -29,6 +30,7 @@
     "@biomejs/biome": "^2.4.12",
     "@types/bun": "^1.3.12",
     "@types/react": "^19.2.14",
+    "husky": "^9.1.7",
     "ink-testing-library": "^4.0.0",
     "typescript": "^6.0.3"
   }
