@@ -16,16 +16,16 @@ codev install
 
 ## Commands
 
-| Command                    | What it does                                          |
-| -------------------------- | ----------------------------------------------------- |
-| `codev`                    | Show version and help                                 |
-| `codev --help`             | Show version and help                                 |
-| `codev install`            | Install and configure AI coding agents                |
-| `codev claude`             | Run the `claude` CLI (forwards remaining arguments)   |
-| `codev claude --restore`   | Restore `~/.claude/` from `~/.claude.backup/`         |
-| `codev opencode`           | Run the `opencode` CLI (forwards remaining arguments) |
-| `codev opencode --restore` | Restore `~/.config/opencode/` from its backup         |
-| `codev logout`             | Sign out of SSO                                       |
+| Command                    | What it does                                                   |
+| -------------------------- | -------------------------------------------------------------- |
+| `codev`                    | Show version and help                                          |
+| `codev --help`             | Show version and help                                          |
+| `codev install`            | Install and configure AI coding agents                         |
+| `codev claude`             | Run the `claude` CLI (forwards remaining arguments)            |
+| `codev claude --restore`   | Restore `~/.claude/` from `~/.claude.backup/`                  |
+| `codev opencode`           | Run the `opencode` CLI (forwards remaining arguments)          |
+| `codev opencode --restore` | Restore `~/.config/opencode/` from `~/.config/opencode.backup` |
+| `codev logout`             | Sign out of SSO                                                |
 
 ## Restoring a previous configuration
 
@@ -77,28 +77,3 @@ rm -rf ~/.config/opencode && mv ~/.config/opencode.backup ~/.config/opencode
 
 The restore command for each backup is also printed in the CLI after each
 tool is configured.
-
-## Development
-
-```bash
-bun install
-bun dev
-```
-
-## Build
-
-```bash
-bun run build
-```
-
-The bundled CLI is output to `dist/index.js`. Run it with:
-
-```bash
-bun start
-```
-
-## Lint & Format
-
-```bash
-bun run fix
-```

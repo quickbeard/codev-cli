@@ -16,16 +16,16 @@ codev install
 
 ## Commands
 
-| Command                    | What it does                                          |
-| -------------------------- | ----------------------------------------------------- |
-| `codev`                    | Show version and help                                 |
-| `codev --help`             | Show version and help                                 |
-| `codev install`            | Install and configure AI coding agents                |
-| `codev claude`             | Run the `claude` CLI (forwards remaining arguments)   |
-| `codev claude --restore`   | Restore `~/.claude/` from `~/.claude.backup/`         |
-| `codev opencode`           | Run the `opencode` CLI (forwards remaining arguments) |
-| `codev opencode --restore` | Restore `~/.config/opencode/` from its backup         |
-| `codev logout`             | Sign out of SSO                                       |
+| Command                    | What it does                                                   |
+| -------------------------- | -------------------------------------------------------------- |
+| `codev`                    | Show version and help                                          |
+| `codev --help`             | Show version and help                                          |
+| `codev install`            | Install and configure AI coding agents                         |
+| `codev claude`             | Run the `claude` CLI (forwards remaining arguments)            |
+| `codev claude --restore`   | Restore `~/.claude/` from `~/.claude.backup/`                  |
+| `codev opencode`           | Run the `opencode` CLI (forwards remaining arguments)          |
+| `codev opencode --restore` | Restore `~/.config/opencode/` from `~/.config/opencode.backup` |
+| `codev logout`             | Sign out of SSO                                                |
 
 ## Restoring a previous configuration
 
