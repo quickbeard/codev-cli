@@ -22,6 +22,9 @@
     "postpack": "mv README.md README.npm.md && mv README.repo.md README.md",
     "prepare": "husky"
   },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": "bun run fix && bun run typecheck && bun test && bun run build"
+  },
   "dependencies": {
     "ink": "^7.0.1",
     "react": "^19.2.5"
@@ -32,6 +35,7 @@
     "@types/react": "^19.2.14",
     "husky": "^9.1.7",
     "ink-testing-library": "^4.0.0",
+    "lint-staged": "^16.4.0",
     "typescript": "^6.0.3"
   }
 }
