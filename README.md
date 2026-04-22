@@ -1,6 +1,6 @@
 # CoDev
 
-CoDev — AI Coding Agent Hub. Install, configure, and launch AI coding agents (Claude Code, OpenCode) from a single CLI.
+CoDev — AI Coding Agent Hub. Install, configure, and manage AI coding agents (Claude Code, OpenCode, etc.) from a single CLI.
 
 ## Install
 
