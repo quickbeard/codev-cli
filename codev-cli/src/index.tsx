@@ -3,6 +3,7 @@ import { render } from "ink";
 import { App } from "@/App.js";
 import { logout } from "@/auth.js";
 import { printHelp } from "@/help.js";
+import { runRestore } from "@/restore.js";
 import { runAgent } from "@/run.js";
 
 const [command, ...args] = process.argv.slice(2);
@@ -28,9 +29,15 @@ switch (command) {
 		break;
 	}
 	case "claude":
+		if (args[0] === "--restore") {
+			process.exit(runRestore("claude-code"));
+		}
 		process.exit(await runAgent("claude", args));
 		break;
 	case "opencode":
+		if (args[0] === "--restore") {
+			process.exit(runRestore("opencode"));
+		}
 		process.exit(await runAgent("opencode", args));
 		break;
 	default:

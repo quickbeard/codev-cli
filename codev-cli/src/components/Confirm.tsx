@@ -17,6 +17,11 @@ const CONFIG_FILE: Record<Tool, string> = {
 	opencode: "opencode.json",
 };
 
+const RESTORE_CMD: Record<Tool, string> = {
+	"claude-code": "codev claude --restore",
+	opencode: "codev opencode --restore",
+};
+
 export function Confirm({ tools, onConfirm, readOnly = false }: ConfirmProps) {
 	useInput(
 		(input, key) => {
@@ -47,9 +52,7 @@ export function Confirm({ tools, onConfirm, readOnly = false }: ConfirmProps) {
 								{`  Backup:   ${status.sourcePath} → ${status.backupPath}`}
 							</Text>
 						)}
-						<Text>
-							{`  Restore:  rm -rf ${status.sourcePath} && mv ${status.backupPath} ${status.sourcePath}`}
-						</Text>
+						<Text>{`  Restore:  ${RESTORE_CMD[tool]}`}</Text>
 					</Box>
 				);
 			})}

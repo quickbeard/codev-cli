@@ -4,6 +4,7 @@ import {
 	existsSync,
 	mkdirSync,
 	readFileSync,
+	renameSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -127,6 +128,29 @@ export function configureClaudeCode(
 	});
 
 	return [{ kind: "claude-dir", sourcePath: dirPath, backupPath: dirBackup }];
+}
+
+export type RestoreStatus = "restored" | "no-backup";
+
+export interface RestoreResult {
+	status: RestoreStatus;
+	sourcePath: string;
+	backupPath: string;
+}
+
+export function restoreTool(tool: Tool): RestoreResult {
+	const kind: BackupKind =
+		tool === "claude-code" ? "claude-dir" : "opencode-dir";
+	const sourcePath = sourcePathOf(kind);
+	const backupPath = `${sourcePath}.backup`;
+
+	if (!existsSync(backupPath)) {
+		return { status: "no-backup", sourcePath, backupPath };
+	}
+
+	rmSync(sourcePath, { recursive: true, force: true });
+	renameSync(backupPath, sourcePath);
+	return { status: "restored", sourcePath, backupPath };
 }
 
 export function configureOpenCode(

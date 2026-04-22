@@ -1,4 +1,4 @@
-# codev-ai
+# CoDev
 
 CoDev — AI Coding Agent Hub. Install, configure, and launch AI coding agents (Claude Code, OpenCode) from a single CLI.
 
@@ -16,24 +16,26 @@ codev install
 
 ## Commands
 
-| Command         | What it does                                        |
-| --------------- | --------------------------------------------------- |
-| `codev`         | Show version and help                               |
-| `codev --help`  | Show version and help                               |
-| `codev install` | Install and configure AI coding agents              |
-| `codev claude`  | Run the `claude` CLI (forwards remaining arguments) |
-| `codev opencode`| Run the `opencode` CLI (forwards remaining arguments) |
-| `codev logout`  | Sign out of SSO                                     |
+| Command                    | What it does                                          |
+| -------------------------- | ----------------------------------------------------- |
+| `codev`                    | Show version and help                                 |
+| `codev --help`             | Show version and help                                 |
+| `codev install`            | Install and configure AI coding agents                |
+| `codev claude`             | Run the `claude` CLI (forwards remaining arguments)   |
+| `codev claude --restore`   | Restore `~/.claude/` from `~/.claude.backup/`         |
+| `codev opencode`           | Run the `opencode` CLI (forwards remaining arguments) |
+| `codev opencode --restore` | Restore `~/.config/opencode/` from its backup         |
+| `codev logout`             | Sign out of SSO                                       |
 
 ## Restoring a previous configuration
 
 Before writing its own config, `codev` backs up the directory it would
 replace. The backup set depends on which agents you chose in Step 1:
 
-| Selection    | Backed up              |
-| ------------ | ---------------------- |
-| Claude Code  | `~/.claude/`           |
-| OpenCode     | `~/.config/opencode/`  |
+| Selection   | Backed up             |
+| ----------- | --------------------- |
+| Claude Code | `~/.claude/`          |
+| OpenCode    | `~/.config/opencode/` |
 
 If you do **not** select Claude Code, `codev` does not touch `~/.claude/` or
 `~/.claude.json` at all. When Claude Code **is** selected, `~/.claude.json` is
@@ -52,6 +54,19 @@ keeps the existing backup (usually your original, pre-`codev` state). Answer
 
 ### Restore
 
+Use the built-in restore shortcut:
+
+```bash
+codev claude --restore
+codev opencode --restore
+```
+
+Each command removes the active directory and renames the corresponding
+`*.backup` back into place. If no backup exists, the command prints a
+"No backup found" message and exits with code 1.
+
+Or do it manually:
+
 ```bash
 # Claude Code
 rm -rf ~/.claude && mv ~/.claude.backup ~/.claude
@@ -60,8 +75,8 @@ rm -rf ~/.claude && mv ~/.claude.backup ~/.claude
 rm -rf ~/.config/opencode && mv ~/.config/opencode.backup ~/.config/opencode
 ```
 
-The exact restore command for each backup is also printed in the CLI after
-each tool is configured.
+The restore command for each backup is also printed in the CLI after each
+tool is configured.
 
 ## Development
 
