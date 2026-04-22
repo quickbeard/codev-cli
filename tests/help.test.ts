@@ -19,7 +19,7 @@ function output(): string {
 describe("printVersion", () => {
 	test("prints the version string", () => {
 		printVersion();
-		expect(output()).toContain(`v${VERSION}`);
+		expect(output().trim()).toBe(VERSION);
 	});
 
 	test("does not print the help banner", () => {
@@ -31,7 +31,7 @@ describe("printVersion", () => {
 describe("printHelp", () => {
 	test("does not include the version string", () => {
 		printHelp();
-		expect(output()).not.toContain(`v${VERSION}`);
+		expect(output()).not.toContain(VERSION);
 	});
 
 	test("lists the --version flag", () => {
