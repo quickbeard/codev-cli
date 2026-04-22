@@ -18,7 +18,6 @@ codev install
 
 | Command                    | What it does                                                                              |
 | -------------------------- | ----------------------------------------------------------------------------------------- |
-| `codev`                    | Show version and help                                                                     |
 | `codev --help`             | Show version and help                                                                     |
 | `codev install`            | Install and configure AI coding agents                                                    |
 | `codev claude`             | Run the `claude` CLI (forwards remaining arguments)                                       |
