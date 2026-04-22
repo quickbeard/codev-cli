@@ -27,6 +27,11 @@ const LABEL: Record<BackupKind, string> = {
 	"opencode-dir": "OpenCode",
 };
 
+const RESTORE_CMD: Record<BackupKind, string> = {
+	"claude-dir": "codev claude --restore",
+	"opencode-dir": "codev opencode --restore",
+};
+
 function scanConflicts(tools: Tool[]): Conflict[] {
 	const out: Conflict[] = [];
 	for (const tool of tools) {
@@ -43,9 +48,7 @@ function describeResult(r: ConfigureResult): string[] {
 	const lines = [`Configured ${LABEL[r.kind]}`];
 	if (r.backupPath) {
 		lines.push(`  Backup: ${r.backupPath}`);
-		lines.push(
-			`  Restore: rm -rf ${r.sourcePath} && mv ${r.backupPath} ${r.sourcePath}`,
-		);
+		lines.push(`  Restore: ${RESTORE_CMD[r.kind]}`);
 	}
 	return lines;
 }

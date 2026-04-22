@@ -265,3 +265,47 @@ describe("getBackupStatus", () => {
 		expect(status?.hasBackup).toBe(false);
 	});
 });
+
+describe("restoreTool", () => {
+	test("replaces the live Claude dir with the backup", async () => {
+		const livePath = join(tempDir, ".claude");
+		const backupPath = `${livePath}.backup`;
+		mkdirSync(livePath, { recursive: true });
+		writeFileSync(join(livePath, "settings.json"), '{"marker":"live"}');
+		mkdirSync(backupPath, { recursive: true });
+		writeFileSync(join(backupPath, "settings.json"), '{"marker":"backup"}');
+
+		const { restoreTool } = await import("@/setup.js");
+		const result = restoreTool("claude-code");
+
+		expect(result.status).toBe("restored");
+		expect(existsSync(backupPath)).toBe(false);
+		expect(existsSync(livePath)).toBe(true);
+		const restored = JSON.parse(
+			readFileSync(join(livePath, "settings.json"), "utf-8"),
+		);
+		expect(restored.marker).toBe("backup");
+	});
+
+	test("restores when no live dir is present", async () => {
+		const livePath = join(tempDir, ".config", "opencode");
+		const backupPath = `${livePath}.backup`;
+		mkdirSync(backupPath, { recursive: true });
+		writeFileSync(join(backupPath, "opencode.json"), '{"marker":"backup"}');
+
+		const { restoreTool } = await import("@/setup.js");
+		const result = restoreTool("opencode");
+
+		expect(result.status).toBe("restored");
+		expect(existsSync(backupPath)).toBe(false);
+		expect(existsSync(livePath)).toBe(true);
+	});
+
+	test("returns no-backup status when backup missing", async () => {
+		const { restoreTool } = await import("@/setup.js");
+		const result = restoreTool("claude-code");
+
+		expect(result.status).toBe("no-backup");
+		expect(result.backupPath).toBe(join(tempDir, ".claude.backup"));
+	});
+});
