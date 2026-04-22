@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import { BASE_URL } from "@/const.js";
 
 const SSO_BASE_URL = `${BASE_URL}sso-wrapper`;
-const CLIENT_ID = "litellm-test";
+const CLIENT_ID = atob("bGl0ZWxsbS10ZXN0");
 const REVOKE_TIMEOUT_MS = 3_000;
 
 function authFilePath() {
@@ -72,7 +72,7 @@ export async function logout(): Promise<boolean> {
 		return false;
 	}
 	if (data) {
-		await revokeTokens(data).catch(() => {});
+		await revokeTokens(data);
 	}
 	return true;
 }

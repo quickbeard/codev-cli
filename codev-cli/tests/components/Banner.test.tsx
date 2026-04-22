@@ -19,7 +19,7 @@ describe("Banner", () => {
 		const { lastFrame } = render(<Banner />);
 
 		const output = lastFrame() ?? "";
-		expect(output).toContain("AI Coding Agent Installer");
+		expect(output).toContain("AI Coding Agent Hub");
 	});
 
 	test("renders the version", () => {

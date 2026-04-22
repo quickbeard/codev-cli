@@ -11,8 +11,19 @@ npm install -g codev-cli
 Then run:
 
 ```bash
-codev
+codev install
 ```
+
+## Commands
+
+| Command         | What it does                                        |
+| --------------- | --------------------------------------------------- |
+| `codev`         | Show version and help                               |
+| `codev --help`  | Show version and help                               |
+| `codev install` | Install and configure AI coding agents              |
+| `codev claude`  | Run the `claude` CLI (forwards remaining arguments) |
+| `codev opencode`| Run the `opencode` CLI (forwards remaining arguments) |
+| `codev logout`  | Sign out of SSO                                     |
 
 ## Restoring a previous configuration
 

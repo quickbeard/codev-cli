@@ -1,6 +1,5 @@
 import { Box, Text } from "ink";
-
-const VERSION = "0.1.0";
+import { VERSION } from "@/const.js";
 
 const LOGO = [
 	" ██████╗ ██████╗ ██████╗ ███████╗██╗   ██╗",
@@ -20,7 +19,7 @@ export function Banner() {
 				{LOGO}
 			</Text>
 			<Box marginTop={1} justifyContent="center" width={LOGO_WIDTH}>
-				<Text>{"⚡ AI Coding Agent Installer "}</Text>
+				<Text>{"⚡ AI Coding Agent Hub "}</Text>
 				<Text dimColor>v{VERSION}</Text>
 			</Box>
 			<Text dimColor>{"─".repeat(LOGO_WIDTH)}</Text>
