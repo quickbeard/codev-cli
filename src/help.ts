@@ -1,6 +1,12 @@
+import { VERSION } from "@/const.js";
+
 function link(url: string): string {
 	if (!process.stdout.isTTY) return url;
 	return `\x1b]8;;${url}\x1b\\${url}\x1b]8;;\x1b\\`;
+}
+
+export function printVersion() {
+	console.log(`${VERSION}`);
 }
 
 export function printHelp() {
@@ -15,6 +21,7 @@ Commands:
   opencode            Run the OpenCode CLI (${link("https://opencode.ai/docs/cli")})
   opencode --restore  Restore ~/.config/opencode/opencode.json from ~/.config/opencode/opencode.json.backup
   logout              Sign out of SSO
+  --version, -v       Show version
   --help, -h          Show this help
 `);
 }

@@ -2,7 +2,7 @@
 import { render } from "ink";
 import { App } from "@/App.js";
 import { logout } from "@/auth.js";
-import { printHelp } from "@/help.js";
+import { printHelp, printVersion } from "@/help.js";
 import { runRestore } from "@/restore.js";
 import { runAgent } from "@/run.js";
 
@@ -14,6 +14,12 @@ switch (command) {
 	case "-h":
 	case "help":
 		printHelp();
+		process.exit(0);
+		break;
+	case "--version":
+	case "-v":
+	case "version":
+		printVersion();
 		process.exit(0);
 		break;
 	case "install": {
