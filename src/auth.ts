@@ -256,6 +256,13 @@ async function getAuthCode(
 			}
 		};
 
+		// Captured once when listen() completes. The request handler must use
+		// this rather than re-reading server.address(), which returns null after
+		// server.close() — a stray browser request firing after /callback closed
+		// the server (e.g. a keep-alive followup or favicon poke) would otherwise
+		// throw "Cannot destructure property 'port' of 'server.address(...)'".
+		let boundPort = 0;
+
 		const buildAuthorizeUrl = (port: number) =>
 			`${SSO_BASE_URL}/authorize?` +
 			`response_type=code` +
@@ -270,14 +277,13 @@ async function getAuthCode(
 		const server = createServer((req, res) => {
 			const host = req.headers.host ?? "127.0.0.1";
 			const url = new URL(req.url ?? "/", `http://${host}`);
-			const { port } = server.address() as AddressInfo;
 
 			// Step 1 (forceLogin only): CAS has just killed its session cookie
 			// and redirected the browser back to us. Now bounce it to /authorize
 			// so the wrapper can start a fresh login — this time CAS will show
 			// the credential form because there's no session cookie.
 			if (url.pathname === "/logout-done") {
-				res.writeHead(302, { Location: buildAuthorizeUrl(port) });
+				res.writeHead(302, { Location: buildAuthorizeUrl(boundPort) });
 				res.end();
 				return;
 			}
@@ -327,15 +333,15 @@ async function getAuthCode(
 			server.close();
 			resolve({
 				code,
-				redirectUri: `http://127.0.0.1:${port}/callback`,
+				redirectUri: `http://127.0.0.1:${boundPort}/callback`,
 			});
 		});
 
 		server.listen(0, "127.0.0.1", () => {
-			const { port } = server.address() as AddressInfo;
+			boundPort = (server.address() as AddressInfo).port;
 			const initialUrl = forceLogin
-				? `${SSO_BASE_URL}/logout?redirect_uri=${encodeURIComponent(`http://127.0.0.1:${port}/logout-done`)}`
-				: buildAuthorizeUrl(port);
+				? `${SSO_BASE_URL}/logout?redirect_uri=${encodeURIComponent(`http://127.0.0.1:${boundPort}/logout-done`)}`
+				: buildAuthorizeUrl(boundPort);
 
 			onReady(() => {
 				onLog(
