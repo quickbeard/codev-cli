@@ -229,6 +229,30 @@ describe("configureOpenCode", () => {
 		expect(config.provider.other).toBeUndefined();
 		expect(config.provider.aigateway.options.apiKey).toBe("sk-new");
 	});
+
+	test("preserves a pre-existing opencode.json backup across repeated runs", async () => {
+		const dir = join(tempDir, ".config", "opencode");
+		const filePath = join(dir, "opencode.json");
+		const backupPath = `${filePath}.backup`;
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(backupPath, JSON.stringify({ marker: "original" }));
+		writeFileSync(
+			filePath,
+			JSON.stringify({
+				provider: { aigateway: { options: { apiKey: "prev-codev-run" } } },
+			}),
+		);
+
+		const { configureOpenCode } = await import("@/configure.js");
+		const results = configureOpenCode("sk-new");
+
+		const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
+		expect(backup.marker).toBe("original");
+		expect(results[0]?.backupPath).toBe(backupPath);
+
+		const config = JSON.parse(readFileSync(filePath, "utf-8"));
+		expect(config.provider.aigateway.options.apiKey).toBe("sk-new");
+	});
 });
 
 describe("getBackupStatus", () => {
