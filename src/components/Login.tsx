@@ -4,7 +4,7 @@ import { login } from "@/auth.js";
 import { fetchApiKey } from "@/proxy.js";
 
 interface LoginProps {
-	onDone: (apiKey: string) => void;
+	onDone: (apiKey: string | null) => void;
 }
 
 export function Login({ onDone }: LoginProps) {
@@ -26,7 +26,10 @@ export function Login({ onDone }: LoginProps) {
 				const key = await fetchApiKey(auth.access_token);
 				onDone(key);
 			})
-			.catch((err: Error) => setError(err.message));
+			.catch((err: Error) => {
+				setError(err.message);
+				onDone(null);
+			});
 	}, [addLog, onDone]);
 
 	useInput((_input, key) => {

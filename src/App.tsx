@@ -14,9 +14,21 @@ type Phase =
 	| "select"
 	| "confirm"
 	| "installing"
+	| "install-failed"
 	| "login"
+	| "login-failed"
 	| "configuring"
+	| "configure-failed"
 	| "done";
+
+const POST_INSTALL: Phase[] = [
+	"login",
+	"login-failed",
+	"configuring",
+	"configure-failed",
+	"done",
+];
+const POST_LOGIN: Phase[] = ["configuring", "configure-failed", "done"];
 
 export function App() {
 	const { exit } = useApp();
@@ -40,19 +52,34 @@ export function App() {
 		[exit],
 	);
 
-	const handleInstallDone = useCallback(() => {
-		setStep("login");
+	// On failure we set a terminal `*-failed` phase and stop advancing. The
+	// step's error frame stays rendered so the user can read it; exiting the
+	// app is left to the user (Ctrl-C), matching Login/Configure's prior
+	// hang-on-error behavior.
+	const handleInstallDone = useCallback((success: boolean) => {
+		setStep(success ? "login" : "install-failed");
 	}, []);
 
-	const handleLoginDone = useCallback((key: string) => {
+	const handleLoginDone = useCallback((key: string | null) => {
+		if (key === null) {
+			setStep("login-failed");
+			return;
+		}
 		setApiKey(key);
 		setStep("configuring");
 	}, []);
 
-	const handleConfigureDone = useCallback(() => {
-		setStep("done");
-		exit();
-	}, [exit]);
+	const handleConfigureDone = useCallback(
+		(success: boolean) => {
+			if (!success) {
+				setStep("configure-failed");
+				return;
+			}
+			setStep("done");
+			exit();
+		},
+		[exit],
+	);
 
 	return (
 		<Box flexDirection="column" padding={1}>
@@ -73,9 +100,7 @@ export function App() {
 						/>
 					</Step>
 				)}
-				{(step === "installing" ||
-					step === "login" ||
-					step === "configuring") && (
+				{step !== "select" && step !== "confirm" && (
 					<Step
 						active={step === "installing"}
 						title={<Text bold>Installing packages</Text>}
@@ -83,12 +108,12 @@ export function App() {
 						<Install tools={tools} onDone={handleInstallDone} />
 					</Step>
 				)}
-				{(step === "login" || step === "configuring") && (
+				{POST_INSTALL.includes(step) && (
 					<Step active={step === "login"} title={loginTitle()}>
 						<Login onDone={handleLoginDone} />
 					</Step>
 				)}
-				{step === "configuring" && apiKey && (
+				{POST_LOGIN.includes(step) && apiKey && (
 					<Step active={step === "configuring"} title={configureTitle()}>
 						<Configure
 							tools={tools}

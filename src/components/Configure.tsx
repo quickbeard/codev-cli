@@ -11,7 +11,7 @@ import {
 interface ConfigureProps {
 	tools: Tool[];
 	apiKey: string;
-	onDone: () => void;
+	onDone: (success: boolean) => void;
 }
 
 type Phase = "running" | "done" | "error";
@@ -75,10 +75,11 @@ export function Configure({ tools, apiKey, onDone }: ConfigureProps) {
 			}
 			setLogs(next);
 			setPhase("done");
-			setTimeout(onDone, 1000);
+			setTimeout(() => onDone(true), 1000);
 		} catch (err) {
 			setError((err as Error).message);
 			setPhase("error");
+			onDone(false);
 		}
 	}, [phase, tools, apiKey, onDone]);
 

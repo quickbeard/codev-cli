@@ -27,7 +27,7 @@ interface Item {
 
 interface InstallProps {
 	tools: Tool[];
-	onDone: () => void;
+	onDone: (success: boolean) => void;
 }
 
 interface ExecResult {
@@ -36,9 +36,13 @@ interface ExecResult {
 	error: NodeJS.ErrnoException | null;
 }
 
+// On Windows, `npm` is a `.cmd` shim that `execFile` can't resolve without a
+// shell. Enabling the shell on win32 lets the OS find `npm.cmd`/`npx.cmd`.
+const USE_SHELL = process.platform === "win32";
+
 function execAsync(file: string, args: string[]): Promise<ExecResult> {
 	return new Promise((resolve) => {
-		execFile(file, args, (error, stdout, stderr) => {
+		execFile(file, args, { shell: USE_SHELL }, (error, stdout, stderr) => {
 			resolve({
 				stdout: stdout?.toString() ?? "",
 				stderr: stderr?.toString() ?? "",
@@ -123,7 +127,7 @@ export function Install({ tools, onDone }: InstallProps) {
 		hasRun.current = true;
 		setItems((prev) => prev.map((it) => ({ ...it, status: "installing" })));
 		(async () => {
-			await Promise.all(
+			const errors = await Promise.all(
 				tools.map(async (tool, i) => {
 					const err = await installAndVerify(tool);
 					setItems((prev) =>
@@ -137,9 +141,10 @@ export function Install({ tools, onDone }: InstallProps) {
 								: it,
 						),
 					);
+					return err;
 				}),
 			);
-			onDone();
+			onDone(errors.every((e) => e === null));
 		})();
 	}, [tools, onDone]);
 

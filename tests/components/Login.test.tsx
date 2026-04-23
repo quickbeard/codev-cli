@@ -46,7 +46,7 @@ describe("Login", () => {
 		expect(output).toContain("Already logged in as test@example.com");
 	});
 
-	test("shows error message on login failure", async () => {
+	test("shows error and signals failure on login failure", async () => {
 		spyOn(auth, "login").mockImplementation(() => {
 			return Promise.reject(new Error("Connection refused"));
 		});
@@ -58,6 +58,8 @@ describe("Login", () => {
 
 		const output = lastFrame() ?? "";
 		expect(output).toContain("Login failed: Connection refused");
+		expect(onDone).toHaveBeenCalledTimes(1);
+		expect(onDone).toHaveBeenCalledWith(null);
 	});
 
 	test("opens browser when Enter is pressed", async () => {
@@ -133,6 +135,7 @@ describe("Login", () => {
 
 		const output = lastFrame() ?? "";
 		expect(output).toContain("Login failed: Proxy /auth/exchange failed");
-		expect(onDone).not.toHaveBeenCalled();
+		expect(onDone).toHaveBeenCalledTimes(1);
+		expect(onDone).toHaveBeenCalledWith(null);
 	});
 });
