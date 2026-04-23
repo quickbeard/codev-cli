@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { Box, Text } from "ink";
 import Spinner from "ink-spinner";
 import { useEffect, useRef, useState } from "react";
-import type { Tool } from "@/setup.js";
+import type { Tool } from "@/configure.js";
 
 const PKG: Record<Tool, string> = {
 	"claude-code": "@anthropic-ai/claude-code",
@@ -40,26 +40,24 @@ export function Install({ tools, onDone }: InstallProps) {
 	useEffect(() => {
 		if (hasRun.current) return;
 		hasRun.current = true;
+		setItems((prev) => prev.map((it) => ({ ...it, status: "installing" })));
 		(async () => {
-			for (const [i, tool] of tools.entries()) {
-				setItems((prev) =>
-					prev.map((it, idx) =>
-						idx === i ? { ...it, status: "installing" } : it,
-					),
-				);
-				const err = await installPackage(PKG[tool]);
-				setItems((prev) =>
-					prev.map((it, idx) =>
-						idx === i
-							? {
-									...it,
-									status: err ? "failed" : "done",
-									error: err ?? undefined,
-								}
-							: it,
-					),
-				);
-			}
+			await Promise.all(
+				tools.map(async (tool, i) => {
+					const err = await installPackage(PKG[tool]);
+					setItems((prev) =>
+						prev.map((it, idx) =>
+							idx === i
+								? {
+										...it,
+										status: err ? "failed" : "done",
+										error: err ?? undefined,
+									}
+								: it,
+						),
+					);
+				}),
+			);
 			onDone();
 		})();
 	}, [tools, onDone]);

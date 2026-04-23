@@ -1,3 +1,5 @@
+import { BASE_URL } from "@/const.js";
+
 interface ExchangeResponse {
 	api_key: string;
 	user: {
@@ -11,9 +13,6 @@ interface ErrorResponse {
 	error?: string;
 }
 
-import { BASE_URL } from "@/const.js";
-
-// Use const PROXY_URL = "http://localhost:8787"; for local
 const PROXY_URL = `${BASE_URL}codev-proxy`;
 
 export async function fetchApiKey(accessToken: string): Promise<string> {

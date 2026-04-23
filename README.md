@@ -63,7 +63,7 @@ mv ~/.claude/settings.json.backup ~/.claude/settings.json
 mv ~/.config/opencode/opencode.json.backup ~/.config/opencode/opencode.json
 ```
 
-The restore command for each backup is also printed in the CLI after each tool is configured.
+If you have a session running, you might need to restart it with `claude -c` or `opencode -c` to resume your progress.
 
 ## Development
 

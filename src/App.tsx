@@ -8,7 +8,7 @@ import { Install } from "@/components/Install.js";
 import { Login, loginTitle } from "@/components/Login.js";
 import { Step } from "@/components/Step.js";
 import { ToolSelect, toolSelectTitle } from "@/components/ToolSelect.js";
-import type { Tool } from "@/setup.js";
+import type { Tool } from "@/configure.js";
 
 type Phase =
 	| "select"

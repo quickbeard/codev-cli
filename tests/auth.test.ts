@@ -148,6 +148,17 @@ describe("logout", () => {
 			bodies.some((b: string) => b.includes("token_type_hint=refresh_token")),
 		).toBe(true);
 	});
+
+	test("writes force-login marker so next login re-auths at the IdP", async () => {
+		writeAuthFile(VALID_AUTH);
+		await logout();
+		expect(existsSync(join(tempDir, ".codev", "force-login"))).toBe(true);
+	});
+
+	test("does not write marker when there was no auth file to remove", async () => {
+		expect(await logout()).toBe(false);
+		expect(existsSync(join(tempDir, ".codev", "force-login"))).toBe(false);
+	});
 });
 
 describe("login", () => {
@@ -424,5 +435,183 @@ describe("login full OAuth flow", () => {
 		expect(callbackRes).not.toBeNull();
 		const html = await (callbackRes as unknown as Response).text();
 		expect(html).toContain("Login Failed");
+	});
+});
+
+describe("login with force-login marker", () => {
+	let fetchSpy: ReturnType<typeof spyOn>;
+	let execFileSpy: ReturnType<typeof spyOn>;
+	const originalFetch = globalThis.fetch;
+
+	function writeMarker() {
+		const dir = join(tempDir, ".codev");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "force-login"), "");
+	}
+
+	function getInitialUrl(): URL {
+		const call = execFileSpy.mock.calls[0];
+		return new URL(call?.[1]?.[0] as string);
+	}
+
+	beforeEach(() => {
+		execFileSpy = spyOn(childProcess, "execFile").mockImplementation(
+			(() => {}) as unknown as typeof childProcess.execFile,
+		);
+		fetchSpy = mockAuthFetch({
+			"/token": async () =>
+				new Response(
+					JSON.stringify({
+						access_token: "flow-access-token",
+						id_token: "flow-id-token",
+						expires_in: 3600,
+					}),
+					{ headers: { "Content-Type": "application/json" } },
+				),
+			"/userinfo": async () =>
+				new Response(
+					JSON.stringify({
+						sub: "flowuser",
+						email: "flow@example.com",
+						displayName: "Flow User",
+					}),
+					{ headers: { "Content-Type": "application/json" } },
+				),
+		});
+	});
+
+	afterEach(() => {
+		fetchSpy?.mockRestore();
+		execFileSpy?.mockRestore();
+	});
+
+	test("opens the wrapper /logout URL first instead of /authorize", async () => {
+		writeMarker();
+		let openedUrl: URL | null = null;
+
+		const loginPromise = login(
+			() => {},
+			(openBrowserFn) => {
+				openBrowserFn();
+				openedUrl = getInitialUrl();
+				// Drive the chain: /logout-done → follow 302 → /callback
+				const logoutDoneUri = openedUrl.searchParams.get("redirect_uri");
+				const port = Number.parseInt(new URL(logoutDoneUri ?? "").port, 10);
+				setTimeout(async () => {
+					const redirect = await originalFetch(
+						`http://localhost:${port}/logout-done`,
+						{ redirect: "manual" },
+					);
+					const next = new URL(redirect.headers.get("location") ?? "");
+					const state = next.searchParams.get("state") ?? "";
+					await originalFetch(
+						`http://localhost:${port}/callback?code=c&state=${state}`,
+					);
+				}, 50);
+			},
+		);
+
+		await loginPromise;
+		expect(openedUrl).not.toBeNull();
+		expect((openedUrl as unknown as URL).pathname).toBe("/sso-wrapper/logout");
+		expect(
+			(openedUrl as unknown as URL).searchParams.get("redirect_uri") ?? "",
+		).toContain("/logout-done");
+	});
+
+	test("/logout-done returns a 302 to /authorize with the original PKCE params", async () => {
+		writeMarker();
+		let redirectLocation: string | null = null;
+
+		const loginPromise = login(
+			() => {},
+			(openBrowserFn) => {
+				openBrowserFn();
+				const initial = getInitialUrl();
+				const logoutDoneUri = initial.searchParams.get("redirect_uri");
+				const port = Number.parseInt(new URL(logoutDoneUri ?? "").port, 10);
+				setTimeout(async () => {
+					const redirect = await originalFetch(
+						`http://localhost:${port}/logout-done`,
+						{ redirect: "manual" },
+					);
+					redirectLocation = redirect.headers.get("location");
+					const next = new URL(redirectLocation ?? "");
+					const state = next.searchParams.get("state") ?? "";
+					await originalFetch(
+						`http://localhost:${port}/callback?code=c&state=${state}`,
+					);
+				}, 50);
+			},
+		);
+
+		await loginPromise;
+		expect(redirectLocation).not.toBeNull();
+		const authorizeUrl = new URL(redirectLocation as unknown as string);
+		expect(authorizeUrl.pathname).toBe("/sso-wrapper/authorize");
+		expect(authorizeUrl.searchParams.get("response_type")).toBe("code");
+		expect(authorizeUrl.searchParams.get("code_challenge_method")).toBe("S256");
+		expect(authorizeUrl.searchParams.get("code_challenge") ?? "").not.toBe("");
+		expect(authorizeUrl.searchParams.get("nonce") ?? "").toMatch(
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+		);
+	});
+
+	test("clears the force-login marker after a successful login", async () => {
+		writeMarker();
+		const markerPath = join(tempDir, ".codev", "force-login");
+		expect(existsSync(markerPath)).toBe(true);
+
+		await login(
+			() => {},
+			(openBrowserFn) => {
+				openBrowserFn();
+				const initial = getInitialUrl();
+				const logoutDoneUri = initial.searchParams.get("redirect_uri");
+				const port = Number.parseInt(new URL(logoutDoneUri ?? "").port, 10);
+				setTimeout(async () => {
+					const redirect = await originalFetch(
+						`http://localhost:${port}/logout-done`,
+						{ redirect: "manual" },
+					);
+					const next = new URL(redirect.headers.get("location") ?? "");
+					const state = next.searchParams.get("state") ?? "";
+					await originalFetch(
+						`http://localhost:${port}/callback?code=c&state=${state}`,
+					);
+				}, 50);
+			},
+		);
+
+		expect(existsSync(markerPath)).toBe(false);
+	});
+
+	test("uses /authorize directly when no marker is present", async () => {
+		let openedUrl: URL | null = null;
+
+		const loginPromise = login(
+			() => {},
+			(openBrowserFn) => {
+				openBrowserFn();
+				openedUrl = getInitialUrl();
+				const port = Number.parseInt(
+					openedUrl.searchParams.get("redirect_uri")
+						? new URL(openedUrl.searchParams.get("redirect_uri") as string).port
+						: "0",
+					10,
+				);
+				const state = openedUrl.searchParams.get("state") ?? "";
+				setTimeout(() => {
+					originalFetch(
+						`http://localhost:${port}/callback?code=c&state=${state}`,
+					);
+				}, 50);
+			},
+		);
+
+		await loginPromise;
+		expect((openedUrl as unknown as URL).pathname).toBe(
+			"/sso-wrapper/authorize",
+		);
 	});
 });

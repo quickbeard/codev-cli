@@ -7,7 +7,7 @@ import {
 	configureOpenCode,
 	getBackupStatus,
 	type Tool,
-} from "@/setup.js";
+} from "@/configure.js";
 
 interface ConfigureProps {
 	tools: Tool[];
@@ -27,14 +27,9 @@ const LABEL: Record<BackupKind, string> = {
 	"opencode-config": "OpenCode",
 };
 
-const RESTORE_CMD: Record<BackupKind, string> = {
-	"claude-settings": "codev claude --restore",
-	"opencode-config": "codev opencode --restore",
-};
-
-const RESUME_CMD: Record<Tool, string> = {
-	"claude-code": "codev claude -c",
-	opencode: "codev opencode -c",
+const RUN_CMD: Record<Tool, string> = {
+	"claude-code": "codev claude",
+	opencode: "codev opencode",
 };
 
 function resumeMessage(tools: Tool[]): ReactNode {
@@ -42,7 +37,7 @@ function resumeMessage(tools: Tool[]): ReactNode {
 	const parts = tools.flatMap((t, i) => {
 		const cmd = (
 			<Text key={t} color="cyan">
-				{RESUME_CMD[t]}
+				{RUN_CMD[t]}
 			</Text>
 		);
 		if (i === 0) return [cmd];
@@ -51,9 +46,9 @@ function resumeMessage(tools: Tool[]): ReactNode {
 	});
 	return (
 		<Text>
-			{"Done! If you have a session running, you need to restart it with "}
+			{"Done! You can now run "}
 			{parts}
-			{" to resume your progress."}
+			{" to get started."}
 		</Text>
 	);
 }
@@ -72,10 +67,6 @@ function scanConflicts(tools: Tool[]): Conflict[] {
 
 function describeResult(r: ConfigureResult): string[] {
 	const lines = [`Configured ${LABEL[r.kind]}`];
-	if (r.backupPath) {
-		lines.push(`  Backup: ${r.backupPath}`);
-		lines.push(`  Restore: ${RESTORE_CMD[r.kind]}`);
-	}
 	return lines;
 }
 
@@ -151,10 +142,10 @@ export function Configure({ tools, apiKey, onDone }: ConfigureProps) {
 		<Box flexDirection="column">
 			{phase === "prompt" && current && (
 				<Box flexDirection="column">
-					<Text color="cyan">
+					<Text color="#ff8800">
 						{`Backup already exists at ${current.backupPath}`}
 					</Text>
-					<Text color="cyan">
+					<Text color="#ff8800">
 						{`Overwrite it with the current ${LABEL[current.kind]} contents? [y/N] (${index + 1}/${conflicts.length})`}
 					</Text>
 				</Box>

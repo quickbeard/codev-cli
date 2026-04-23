@@ -18,7 +18,8 @@ codev install
 
 | Command                    | What it does                                                                              |
 | -------------------------- | ----------------------------------------------------------------------------------------- |
-| `codev --help`             | Show version and help                                                                     |
+| `codev --help`, `-h`       | Show help                                                                                 |
+| `codev --version`, `-v`    | Show version                                                                              |
 | `codev install`            | Install and configure AI coding agents                                                    |
 | `codev claude`             | Run the `claude` CLI (forwards remaining arguments)                                       |
 | `codev claude --restore`   | Restore `~/.claude/settings.json` from `~/.claude/settings.json.backup`                   |
@@ -62,4 +63,4 @@ mv ~/.claude/settings.json.backup ~/.claude/settings.json
 mv ~/.config/opencode/opencode.json.backup ~/.config/opencode/opencode.json
 ```
 
-The restore command for each backup is also printed in the CLI after each tool is configured.
+If you have a session running, you might need to restart it with `claude -c` or `opencode -c` to resume your progress.

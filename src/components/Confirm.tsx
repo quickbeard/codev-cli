@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from "ink";
-import { getBackupStatus, type Tool } from "@/setup.js";
+import { getBackupStatus, type Tool } from "@/configure.js";
 
 interface ConfirmProps {
 	tools: Tool[];
@@ -46,7 +46,11 @@ export function Confirm({ tools, onConfirm, readOnly = false }: ConfirmProps) {
 								{`  Backup:   ${status.sourcePath} → ${status.backupPath}`}
 							</Text>
 						)}
-						<Text>{`  Restore:  ${RESTORE_CMD[tool]}`}</Text>
+						<Text>
+							{"  You can revert to your previous settings by running "}
+							<Text color="cyan">{RESTORE_CMD[tool]}</Text>
+							{". You might need to restart your current session."}
+						</Text>
 					</Box>
 				);
 			})}
@@ -63,7 +67,7 @@ export function confirmTitle() {
 	return (
 		<Text bold color="yellow">
 			{
-				"Heads up — CoDev will replace existing settings for the tools you chose"
+				"Heads up — CoDev will back up your existing settings and replace them with new settings."
 			}
 		</Text>
 	);

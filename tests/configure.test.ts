@@ -27,7 +27,7 @@ afterEach(() => {
 
 describe("bypassClaudeLogin", () => {
 	test("creates .claude.json with hasCompletedOnboarding when file does not exist", async () => {
-		const { bypassClaudeLogin } = await import("@/setup.js");
+		const { bypassClaudeLogin } = await import("@/configure.js");
 		bypassClaudeLogin();
 
 		const filePath = join(tempDir, ".claude.json");
@@ -41,7 +41,7 @@ describe("bypassClaudeLogin", () => {
 		const filePath = join(tempDir, ".claude.json");
 		writeFileSync(filePath, JSON.stringify({ someKey: "someValue" }, null, 2));
 
-		const { bypassClaudeLogin } = await import("@/setup.js");
+		const { bypassClaudeLogin } = await import("@/configure.js");
 		bypassClaudeLogin();
 
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
@@ -54,7 +54,7 @@ describe("bypassClaudeLogin", () => {
 		const original = { hasCompletedOnboarding: true, other: "data" };
 		writeFileSync(filePath, JSON.stringify(original, null, 2));
 
-		const { bypassClaudeLogin } = await import("@/setup.js");
+		const { bypassClaudeLogin } = await import("@/configure.js");
 		bypassClaudeLogin();
 
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
@@ -65,7 +65,7 @@ describe("bypassClaudeLogin", () => {
 		const filePath = join(tempDir, ".claude.json");
 		writeFileSync(filePath, "not valid json{{{");
 
-		const { bypassClaudeLogin } = await import("@/setup.js");
+		const { bypassClaudeLogin } = await import("@/configure.js");
 		bypassClaudeLogin();
 
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
@@ -76,7 +76,7 @@ describe("bypassClaudeLogin", () => {
 		const filePath = join(tempDir, ".claude.json");
 		writeFileSync(filePath, JSON.stringify({ someKey: "someValue" }));
 
-		const { bypassClaudeLogin } = await import("@/setup.js");
+		const { bypassClaudeLogin } = await import("@/configure.js");
 		bypassClaudeLogin();
 
 		expect(existsSync(`${filePath}.backup`)).toBe(false);
@@ -85,7 +85,7 @@ describe("bypassClaudeLogin", () => {
 
 describe("configureClaudeCode", () => {
 	test("creates ~/.claude/settings.json with env block when file does not exist", async () => {
-		const { configureClaudeCode } = await import("@/setup.js");
+		const { configureClaudeCode } = await import("@/configure.js");
 		configureClaudeCode("sk-abc");
 
 		const filePath = join(tempDir, ".claude", "settings.json");
@@ -107,7 +107,7 @@ describe("configureClaudeCode", () => {
 	});
 
 	test("also runs bypassClaudeLogin (creates .claude.json)", async () => {
-		const { configureClaudeCode } = await import("@/setup.js");
+		const { configureClaudeCode } = await import("@/configure.js");
 		configureClaudeCode("sk-abc");
 
 		const claudeJson = join(tempDir, ".claude.json");
@@ -129,7 +129,7 @@ describe("configureClaudeCode", () => {
 			}),
 		);
 
-		const { configureClaudeCode } = await import("@/setup.js");
+		const { configureClaudeCode } = await import("@/configure.js");
 		const results = configureClaudeCode("sk-new");
 
 		const result = results.find((r) => r.kind === "claude-settings");
@@ -152,7 +152,7 @@ describe("configureClaudeCode", () => {
 		writeFileSync(join(dir, "settings.json"), JSON.stringify({ env: {} }));
 		writeFileSync(join(dir, "CLAUDE.md"), "user notes");
 
-		const { configureClaudeCode } = await import("@/setup.js");
+		const { configureClaudeCode } = await import("@/configure.js");
 		configureClaudeCode("sk-new");
 
 		expect(readFileSync(join(dir, "CLAUDE.md"), "utf-8")).toBe("user notes");
@@ -170,7 +170,7 @@ describe("configureClaudeCode", () => {
 			JSON.stringify({ env: { ANTHROPIC_API_KEY: "prev-codev-run" } }),
 		);
 
-		const { configureClaudeCode } = await import("@/setup.js");
+		const { configureClaudeCode } = await import("@/configure.js");
 		configureClaudeCode("sk-new");
 
 		const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
@@ -185,7 +185,7 @@ describe("configureClaudeCode", () => {
 		writeFileSync(backupPath, JSON.stringify({ marker: "stale" }));
 		writeFileSync(filePath, JSON.stringify({ marker: "fresh" }));
 
-		const { configureClaudeCode } = await import("@/setup.js");
+		const { configureClaudeCode } = await import("@/configure.js");
 		configureClaudeCode("sk-new", {
 			overwriteBackups: new Set(["claude-settings"]),
 		});
@@ -197,7 +197,7 @@ describe("configureClaudeCode", () => {
 
 describe("configureOpenCode", () => {
 	test("creates ~/.config/opencode/opencode.json with aigateway provider when file does not exist", async () => {
-		const { configureOpenCode } = await import("@/setup.js");
+		const { configureOpenCode } = await import("@/configure.js");
 		configureOpenCode("sk-xyz");
 
 		const filePath = join(tempDir, ".config", "opencode", "opencode.json");
@@ -214,7 +214,7 @@ describe("configureOpenCode", () => {
 	});
 
 	test("does not touch ~/.claude.json (OpenCode-only install)", async () => {
-		const { configureOpenCode } = await import("@/setup.js");
+		const { configureOpenCode } = await import("@/configure.js");
 		configureOpenCode("sk-xyz");
 
 		expect(existsSync(join(tempDir, ".claude.json"))).toBe(false);
@@ -233,7 +233,7 @@ describe("configureOpenCode", () => {
 			}),
 		);
 
-		const { configureOpenCode } = await import("@/setup.js");
+		const { configureOpenCode } = await import("@/configure.js");
 		const results = configureOpenCode("sk-new");
 
 		expect(results[0]?.backupPath).toBe(backupPath);
@@ -250,13 +250,13 @@ describe("configureOpenCode", () => {
 
 describe("getBackupStatus", () => {
 	test("returns claude-settings for claude-code", async () => {
-		const { getBackupStatus } = await import("@/setup.js");
+		const { getBackupStatus } = await import("@/configure.js");
 		const statuses = getBackupStatus("claude-code");
 		expect(statuses.map((s) => s.kind)).toEqual(["claude-settings"]);
 	});
 
 	test("returns opencode-config for opencode", async () => {
-		const { getBackupStatus } = await import("@/setup.js");
+		const { getBackupStatus } = await import("@/configure.js");
 		const statuses = getBackupStatus("opencode");
 		expect(statuses.map((s) => s.kind)).toEqual(["opencode-config"]);
 	});
@@ -265,7 +265,7 @@ describe("getBackupStatus", () => {
 		mkdirSync(join(tempDir, ".config", "opencode"), { recursive: true });
 		writeFileSync(join(tempDir, ".config", "opencode", "opencode.json"), "{}");
 
-		const { getBackupStatus } = await import("@/setup.js");
+		const { getBackupStatus } = await import("@/configure.js");
 		const [status] = getBackupStatus("opencode");
 		expect(status?.hasSource).toBe(true);
 		expect(status?.hasBackup).toBe(false);
@@ -281,7 +281,7 @@ describe("restoreTool", () => {
 		writeFileSync(livePath, '{"marker":"live"}');
 		writeFileSync(backupPath, '{"marker":"backup"}');
 
-		const { restoreTool } = await import("@/setup.js");
+		const { restoreTool } = await import("@/configure.js");
 		const result = restoreTool("claude-code");
 
 		expect(result.status).toBe("restored");
@@ -300,7 +300,7 @@ describe("restoreTool", () => {
 		writeFileSync(backupPath, '{"marker":"backup"}');
 		writeFileSync(join(dir, "CLAUDE.md"), "user notes");
 
-		const { restoreTool } = await import("@/setup.js");
+		const { restoreTool } = await import("@/configure.js");
 		restoreTool("claude-code");
 
 		expect(readFileSync(join(dir, "CLAUDE.md"), "utf-8")).toBe("user notes");
@@ -313,7 +313,7 @@ describe("restoreTool", () => {
 		mkdirSync(dir, { recursive: true });
 		writeFileSync(backupPath, '{"marker":"backup"}');
 
-		const { restoreTool } = await import("@/setup.js");
+		const { restoreTool } = await import("@/configure.js");
 		const result = restoreTool("opencode");
 
 		expect(result.status).toBe("restored");
@@ -322,7 +322,7 @@ describe("restoreTool", () => {
 	});
 
 	test("returns no-backup status when backup missing", async () => {
-		const { restoreTool } = await import("@/setup.js");
+		const { restoreTool } = await import("@/configure.js");
 		const result = restoreTool("claude-code");
 
 		expect(result.status).toBe("no-backup");

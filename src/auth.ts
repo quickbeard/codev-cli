@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	readFileSync,
 	unlinkSync,
@@ -18,6 +19,28 @@ const REVOKE_TIMEOUT_MS = 3_000;
 
 function authFilePath() {
 	return join(homedir(), ".codev", "auth.json");
+}
+
+function forceLoginPath() {
+	return join(homedir(), ".codev", "force-login");
+}
+
+function markForceLogin() {
+	try {
+		const path = forceLoginPath();
+		mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+		writeFileSync(path, "", { mode: 0o600 });
+	} catch {
+		// Best-effort; worst case is a silent SSO login on the next run.
+	}
+}
+
+function clearForceLogin() {
+	try {
+		unlinkSync(forceLoginPath());
+	} catch {
+		// Fine if it didn't exist.
+	}
 }
 
 export interface AuthData {
@@ -73,6 +96,10 @@ export async function logout(): Promise<boolean> {
 	} catch {
 		return false;
 	}
+	// Revoking tokens does not terminate the IdP's browser session cookie, so
+	// the next /authorize would otherwise silently return a new code. Mark the
+	// next login to force re-authentication via prompt=login.
+	markForceLogin();
 	if (data) {
 		await revokeTokens(data);
 	}
@@ -175,6 +202,8 @@ export async function login(
 		}
 	}
 
+	const forceLogin = existsSync(forceLoginPath());
+
 	const verifier = generateCodeVerifier();
 	const challenge = await generateCodeChallenge(verifier);
 	const state = crypto.randomUUID();
@@ -186,6 +215,7 @@ export async function login(
 		state,
 		challenge,
 		nonce,
+		forceLogin,
 	);
 
 	const tokenRes = await exchangeCode(code, redirectUri, verifier);
@@ -204,6 +234,7 @@ export async function login(
 	};
 
 	saveAuth(authData);
+	clearForceLogin();
 	onLog(`Logged in as ${authData.user.email}`);
 	return authData;
 }
@@ -214,6 +245,7 @@ async function getAuthCode(
 	expectedState: string,
 	codeChallenge: string,
 	nonce: string,
+	forceLogin: boolean,
 ): Promise<{ code: string; redirectUri: string }> {
 	return new Promise((resolve, reject) => {
 		let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -224,9 +256,31 @@ async function getAuthCode(
 			}
 		};
 
+		const buildAuthorizeUrl = (port: number) =>
+			`${SSO_BASE_URL}/authorize?` +
+			`response_type=code` +
+			`&client_id=${encodeURIComponent(CLIENT_ID)}` +
+			`&redirect_uri=${encodeURIComponent(`http://127.0.0.1:${port}/callback`)}` +
+			`&scope=openid%20profile%20email%20offline_access` +
+			`&state=${expectedState}` +
+			`&nonce=${nonce}` +
+			`&code_challenge=${codeChallenge}` +
+			`&code_challenge_method=S256`;
+
 		const server = createServer((req, res) => {
 			const host = req.headers.host ?? "127.0.0.1";
 			const url = new URL(req.url ?? "/", `http://${host}`);
+			const { port } = server.address() as AddressInfo;
+
+			// Step 1 (forceLogin only): CAS has just killed its session cookie
+			// and redirected the browser back to us. Now bounce it to /authorize
+			// so the wrapper can start a fresh login — this time CAS will show
+			// the credential form because there's no session cookie.
+			if (url.pathname === "/logout-done") {
+				res.writeHead(302, { Location: buildAuthorizeUrl(port) });
+				res.end();
+				return;
+			}
 
 			if (url.pathname !== "/callback") {
 				res.writeHead(404, { "Content-Type": "text/plain" });
@@ -268,7 +322,6 @@ async function getAuthCode(
 				return;
 			}
 
-			const { port } = server.address() as AddressInfo;
 			respond(true);
 			finish();
 			server.close();
@@ -280,21 +333,17 @@ async function getAuthCode(
 
 		server.listen(0, "127.0.0.1", () => {
 			const { port } = server.address() as AddressInfo;
-			const redirectUri = `http://127.0.0.1:${port}/callback`;
-			const authorizeUrl =
-				`${SSO_BASE_URL}/authorize?` +
-				`response_type=code` +
-				`&client_id=${encodeURIComponent(CLIENT_ID)}` +
-				`&redirect_uri=${encodeURIComponent(redirectUri)}` +
-				`&scope=openid%20profile%20email%20offline_access` +
-				`&state=${expectedState}` +
-				`&nonce=${nonce}` +
-				`&code_challenge=${codeChallenge}` +
-				`&code_challenge_method=S256`;
+			const initialUrl = forceLogin
+				? `${SSO_BASE_URL}/logout?redirect_uri=${encodeURIComponent(`http://127.0.0.1:${port}/logout-done`)}`
+				: buildAuthorizeUrl(port);
 
 			onReady(() => {
-				onLog("Opening browser for SSO login...");
-				openBrowser(authorizeUrl);
+				onLog(
+					forceLogin
+						? "Opening browser to end existing SSO session and re-login..."
+						: "Opening browser for SSO login...",
+				);
+				openBrowser(initialUrl);
 			});
 
 			timeoutHandle = setTimeout(() => {

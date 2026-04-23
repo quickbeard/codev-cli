@@ -35,7 +35,7 @@ export interface ConfigureResult {
 
 const GATEWAY_BASE_URL = `${BASE_URL}gateway/`;
 const GATEWAY_OPENAI_BASE_URL = `${GATEWAY_BASE_URL}v1`;
-const MODEL_NAME = "MiniMax";
+const MODEL_NAME = atob("TWluaU1heA==");
 
 function sourcePathOf(kind: BackupKind): string {
 	switch (kind) {
