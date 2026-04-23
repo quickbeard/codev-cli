@@ -436,6 +436,95 @@ describe("login full OAuth flow", () => {
 		const html = await (callbackRes as unknown as Response).text();
 		expect(html).toContain("Login Failed");
 	});
+
+	test("regression: stray request alongside /callback does not throw inside the handler", async () => {
+		// Before the port-capture fix, the request handler called
+		// `server.address()` on every request. When /callback closes the
+		// server, any concurrent or stray request landed on the handler with
+		// `server.address()` returning null and crashed with
+		// "Cannot destructure property 'port' of 'server.address(...)'".
+		// The fix captures the port once at listen-time so the handler never
+		// re-reads the address. We assert here that firing /callback together
+		// with a non-callback request lets the login resolve cleanly and that
+		// no uncaught error surfaces in the test process.
+		mockSsoFetch();
+		const uncaught: Error[] = [];
+		const onUncaught = (err: Error) => uncaught.push(err);
+		process.on("uncaughtException", onUncaught);
+
+		try {
+			const result = await login(
+				() => {},
+				(openBrowserFn) => {
+					openBrowserFn();
+					const port = getCallbackPort(execFileSpy);
+					const state = getCallbackState(execFileSpy);
+					setTimeout(async () => {
+						await Promise.all([
+							originalFetch(
+								`http://localhost:${port}/callback?code=c&state=${state}`,
+							),
+							originalFetch(`http://localhost:${port}/anything`).catch(
+								() => null,
+							),
+						]);
+					}, 50);
+				},
+			);
+			expect(result.access_token).toBe("flow-access-token");
+			// Give the loop a tick so any pending request handler errors surface.
+			await new Promise((r) => setTimeout(r, 50));
+		} finally {
+			process.off("uncaughtException", onUncaught);
+		}
+
+		const portMessages = uncaught.filter((e) =>
+			e.message.includes("server.address"),
+		);
+		expect(portMessages).toHaveLength(0);
+	});
+
+	test("regression: a follow-up request after the server closes does not crash the handler", async () => {
+		// Same root cause as above, exercised via a sequential follow-up: the
+		// browser may keep the loopback socket alive and send another request
+		// (e.g. a favicon poke) after /callback already triggered server.close().
+		mockSsoFetch();
+		const uncaught: Error[] = [];
+		const onUncaught = (err: Error) => uncaught.push(err);
+		process.on("uncaughtException", onUncaught);
+		let port = 0;
+
+		try {
+			const result = await login(
+				() => {},
+				(openBrowserFn) => {
+					openBrowserFn();
+					port = getCallbackPort(execFileSpy);
+					const state = getCallbackState(execFileSpy);
+					setTimeout(() => {
+						originalFetch(
+							`http://localhost:${port}/callback?code=c&state=${state}`,
+						);
+					}, 50);
+				},
+			);
+			expect(result.access_token).toBe("flow-access-token");
+			// Now the server has been closed. A follow-up request must not
+			// throw inside the handler — either it responds (handler still
+			// draining a socket) or the connection refuses; both are fine.
+			await originalFetch(`http://localhost:${port}/follow-up`).catch(
+				() => null,
+			);
+			await new Promise((r) => setTimeout(r, 50));
+		} finally {
+			process.off("uncaughtException", onUncaught);
+		}
+
+		const portMessages = uncaught.filter((e) =>
+			e.message.includes("server.address"),
+		);
+		expect(portMessages).toHaveLength(0);
+	});
 });
 
 describe("login with force-login marker", () => {
