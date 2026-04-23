@@ -40,7 +40,7 @@ CoDev will replace `~/.claude/settings.json` and `~/.config/opencode/opencode.js
 
 ### Existing backups
 
-If a backup already exists from a prior CoDev run (`*.backup`), CoDev pauses in Step 3 and asks whether to overwrite it — default is **No**, which keeps the existing backup (usually your original state). Answer `y` to replace it with your current contents.
+If a backup already exists from a prior CoDev run (`*.backup`), CoDev leaves it untouched and proceeds to replace the live config. The existing backup is assumed to be your pre-CoDev original and is never clobbered by later runs. To capture a fresh backup, delete the old `*.backup` first, then run `codev install` again.
 
 ### Restore
 

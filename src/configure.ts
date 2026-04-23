@@ -23,10 +23,6 @@ export interface BackupStatus {
 	hasBackup: boolean;
 }
 
-export interface ConfigureOptions {
-	overwriteBackups?: Set<BackupKind>;
-}
-
 export interface ConfigureResult {
 	kind: BackupKind;
 	sourcePath: string;
@@ -97,15 +93,16 @@ export function getBackupStatus(tool: Tool): BackupStatus[] {
 	return [statusFor("opencode-config")];
 }
 
-function ensureBackup(kind: BackupKind, overwrite: boolean): string | null {
+function ensureBackup(kind: BackupKind): string | null {
 	const sourcePath = sourcePathOf(kind);
 	const backupPath = `${sourcePath}.backup`;
 	if (!existsSync(sourcePath)) {
 		return existsSync(backupPath) ? backupPath : null;
 	}
+	// Preserve any pre-existing backup — assume it's the user's original
+	// pre-codev state and should not be clobbered by later runs.
 	if (existsSync(backupPath)) {
-		if (!overwrite) return backupPath;
-		rmSync(backupPath, { force: true });
+		return backupPath;
 	}
 	copyFileSync(sourcePath, backupPath);
 	return backupPath;
@@ -134,18 +131,10 @@ export function bypassClaudeLogin(): void {
 	}
 }
 
-export function configureClaudeCode(
-	apiKey: string,
-	opts: ConfigureOptions = {},
-): ConfigureResult[] {
-	const overwrites = opts.overwriteBackups ?? new Set<BackupKind>();
-
+export function configureClaudeCode(apiKey: string): ConfigureResult[] {
 	bypassClaudeLogin();
 
-	const backupPath = ensureBackup(
-		"claude-settings",
-		overwrites.has("claude-settings"),
-	);
+	const backupPath = ensureBackup("claude-settings");
 	const sourcePath = sourcePathOf("claude-settings");
 	mkdirSync(dirname(sourcePath), { recursive: true });
 
@@ -188,15 +177,8 @@ export function restoreTool(tool: Tool): RestoreResult {
 	return { status: "restored", sourcePath, backupPath };
 }
 
-export function configureOpenCode(
-	apiKey: string,
-	opts: ConfigureOptions = {},
-): ConfigureResult[] {
-	const overwrites = opts.overwriteBackups ?? new Set<BackupKind>();
-	const backupPath = ensureBackup(
-		"opencode-config",
-		overwrites.has("opencode-config"),
-	);
+export function configureOpenCode(apiKey: string): ConfigureResult[] {
+	const backupPath = ensureBackup("opencode-config");
 	const sourcePath = sourcePathOf("opencode-config");
 	mkdirSync(dirname(sourcePath), { recursive: true });
 

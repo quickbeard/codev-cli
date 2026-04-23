@@ -1,11 +1,10 @@
-import { Box, Text, useInput } from "ink";
+import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
 	type BackupKind,
 	type ConfigureResult,
 	configureClaudeCode,
 	configureOpenCode,
-	getBackupStatus,
 	type Tool,
 } from "@/configure.js";
 
@@ -15,12 +14,7 @@ interface ConfigureProps {
 	onDone: () => void;
 }
 
-type Phase = "prompt" | "running" | "done" | "error";
-
-interface Conflict {
-	kind: BackupKind;
-	backupPath: string;
-}
+type Phase = "running" | "done" | "error";
 
 const LABEL: Record<BackupKind, string> = {
 	"claude-settings": "Claude Code",
@@ -53,76 +47,26 @@ function resumeMessage(tools: Tool[]): ReactNode {
 	);
 }
 
-function scanConflicts(tools: Tool[]): Conflict[] {
-	const out: Conflict[] = [];
-	for (const tool of tools) {
-		for (const s of getBackupStatus(tool)) {
-			if (s.hasSource && s.hasBackup) {
-				out.push({ kind: s.kind, backupPath: s.backupPath });
-			}
-		}
-	}
-	return out;
-}
-
 function describeResult(r: ConfigureResult): string[] {
-	const lines = [`Configured ${LABEL[r.kind]}`];
-	return lines;
+	return [`Configured ${LABEL[r.kind]}`];
 }
 
 export function Configure({ tools, apiKey, onDone }: ConfigureProps) {
-	const [conflicts] = useState(() => scanConflicts(tools));
-	const [phase, setPhase] = useState<Phase>(
-		conflicts.length > 0 ? "prompt" : "running",
-	);
-	const [index, setIndex] = useState(0);
-	const [overwrites, setOverwrites] = useState<Set<BackupKind>>(new Set());
+	const [phase, setPhase] = useState<Phase>("running");
 	const [logs, setLogs] = useState<string[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const hasRun = useRef(false);
-
-	const current = conflicts[index];
-
-	useInput(
-		(input, key) => {
-			if (!current) return;
-			const answer = input.toLowerCase();
-			let keep = false;
-			if (answer === "y") {
-				keep = false;
-			} else if (answer === "n" || key.return) {
-				keep = true;
-			} else {
-				return;
-			}
-			if (!keep) {
-				setOverwrites((prev) => {
-					const next = new Set(prev);
-					next.add(current.kind);
-					return next;
-				});
-			}
-			const nextIdx = index + 1;
-			if (nextIdx >= conflicts.length) {
-				setPhase("running");
-			} else {
-				setIndex(nextIdx);
-			}
-		},
-		{ isActive: phase === "prompt" },
-	);
 
 	useEffect(() => {
 		if (phase !== "running" || hasRun.current) return;
 		hasRun.current = true;
 		try {
 			const results: ConfigureResult[] = [];
-			const opts = { overwriteBackups: overwrites };
 			for (const tool of tools) {
 				if (tool === "claude-code") {
-					results.push(...configureClaudeCode(apiKey, opts));
+					results.push(...configureClaudeCode(apiKey));
 				} else if (tool === "opencode") {
-					results.push(...configureOpenCode(apiKey, opts));
+					results.push(...configureOpenCode(apiKey));
 				}
 			}
 			const next: string[] = [];
@@ -136,20 +80,10 @@ export function Configure({ tools, apiKey, onDone }: ConfigureProps) {
 			setError((err as Error).message);
 			setPhase("error");
 		}
-	}, [phase, tools, apiKey, overwrites, onDone]);
+	}, [phase, tools, apiKey, onDone]);
 
 	return (
 		<Box flexDirection="column">
-			{phase === "prompt" && current && (
-				<Box flexDirection="column">
-					<Text color="#ff8800">
-						{`Backup already exists at ${current.backupPath}`}
-					</Text>
-					<Text color="#ff8800">
-						{`Overwrite it with the current ${LABEL[current.kind]} contents? [y/N] (${index + 1}/${conflicts.length})`}
-					</Text>
-				</Box>
-			)}
 			{logs.map((log, i) => (
 				<Text key={`cfg-${i.toString()}`}>{log}</Text>
 			))}
