@@ -1,6 +1,6 @@
 {
   "name": "codev-ai",
-  "version": "0.1.4",
+  "version": "0.1.3",
   "description": "CoDev — AI Coding Agent Hub. Install, configure, and manage AI coding agents (Claude Code, OpenCode, etc.) from a single CLI.",
   "type": "module",
   "bin": {
