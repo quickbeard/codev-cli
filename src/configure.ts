@@ -37,6 +37,38 @@ const GATEWAY_BASE_URL = `${BASE_URL}gateway/`;
 const GATEWAY_OPENAI_BASE_URL = `${GATEWAY_BASE_URL}v1`;
 const MODEL_NAME = atob("TWluaU1heA==");
 
+const CLAUDE_SCHEMA_URL = atob(
+	"aHR0cHM6Ly9qc29uLnNjaGVtYXN0b3JlLm9yZy9jbGF1ZGUtY29kZS1zZXR0aW5ncy5qc29u",
+);
+const CLAUDE_K = {
+	schema: atob("JHNjaGVtYQ=="),
+	env: atob("ZW52"),
+	baseUrl: atob("QU5USFJPUElDX0JBU0VfVVJM"),
+	apiKey: atob("QU5USFJPUElDX0FQSV9LRVk="),
+	model: atob("QU5USFJPUElDX01PREVM"),
+	opus: atob("QU5USFJPUElDX0RFRkFVTFRfT1BVU19NT0RFTA=="),
+	sonnet: atob("QU5USFJPUElDX0RFRkFVTFRfU09OTkVUX01PREVM"),
+	haiku: atob("QU5USFJPUElDX0RFRkFVTFRfSEFJS1VfTU9ERUw="),
+	agentTeams: atob("Q0xBVURFX0NPREVfRVhQRVJJTUVOVEFMX0FHRU5UX1RFQU1T"),
+};
+
+const OPENCODE_SCHEMA_URL = atob(
+	"aHR0cHM6Ly9vcGVuY29kZS5haS9jb25maWcuanNvbg==",
+);
+const OPENCODE_K = {
+	schema: atob("JHNjaGVtYQ=="),
+	provider: atob("cHJvdmlkZXI="),
+	providerKey: atob("YWlnYXRld2F5"),
+	npm: atob("bnBt"),
+	npmPkg: atob("QGFpLXNkay9vcGVuYWktY29tcGF0aWJsZQ=="),
+	name: atob("bmFtZQ=="),
+	displayName: atob("QUkgR2F0ZXdheQ=="),
+	options: atob("b3B0aW9ucw=="),
+	baseURL: atob("YmFzZVVSTA=="),
+	apiKey: atob("YXBpS2V5"),
+	models: atob("bW9kZWxz"),
+};
+
 function sourcePathOf(kind: BackupKind): string {
 	switch (kind) {
 		case "claude-settings":
@@ -118,15 +150,15 @@ export function configureClaudeCode(
 	mkdirSync(dirname(sourcePath), { recursive: true });
 
 	writeJson(sourcePath, {
-		$schema: "https://json.schemastore.org/claude-code-settings.json",
-		env: {
-			ANTHROPIC_BASE_URL: GATEWAY_BASE_URL,
-			ANTHROPIC_API_KEY: apiKey,
-			ANTHROPIC_MODEL: MODEL_NAME,
-			ANTHROPIC_DEFAULT_OPUS_MODEL: MODEL_NAME,
-			ANTHROPIC_DEFAULT_SONNET_MODEL: MODEL_NAME,
-			ANTHROPIC_DEFAULT_HAIKU_MODEL: MODEL_NAME,
-			CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+		[CLAUDE_K.schema]: CLAUDE_SCHEMA_URL,
+		[CLAUDE_K.env]: {
+			[CLAUDE_K.baseUrl]: GATEWAY_BASE_URL,
+			[CLAUDE_K.apiKey]: apiKey,
+			[CLAUDE_K.model]: MODEL_NAME,
+			[CLAUDE_K.opus]: MODEL_NAME,
+			[CLAUDE_K.sonnet]: MODEL_NAME,
+			[CLAUDE_K.haiku]: MODEL_NAME,
+			[CLAUDE_K.agentTeams]: "1",
 		},
 	});
 
@@ -169,18 +201,18 @@ export function configureOpenCode(
 	mkdirSync(dirname(sourcePath), { recursive: true });
 
 	writeJson(sourcePath, {
-		$schema: "https://opencode.ai/config.json",
-		provider: {
-			aigateway: {
-				npm: "@ai-sdk/openai-compatible",
-				name: "AI Gateway",
-				options: {
-					baseURL: GATEWAY_OPENAI_BASE_URL,
-					apiKey,
+		[OPENCODE_K.schema]: OPENCODE_SCHEMA_URL,
+		[OPENCODE_K.provider]: {
+			[OPENCODE_K.providerKey]: {
+				[OPENCODE_K.npm]: OPENCODE_K.npmPkg,
+				[OPENCODE_K.name]: OPENCODE_K.displayName,
+				[OPENCODE_K.options]: {
+					[OPENCODE_K.baseURL]: GATEWAY_OPENAI_BASE_URL,
+					[OPENCODE_K.apiKey]: apiKey,
 				},
-				models: {
+				[OPENCODE_K.models]: {
 					[MODEL_NAME]: {
-						name: MODEL_NAME,
+						[OPENCODE_K.name]: MODEL_NAME,
 					},
 				},
 			},
