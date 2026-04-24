@@ -233,4 +233,58 @@ describe("App fail-stop invariant", () => {
 			model: "custom-model",
 		});
 	});
+
+	test("SSO retry after failure reaches the done screen", async () => {
+		stubExecFile(() => ({ stdout: "ok" }));
+		const loginSpy = spyOn(auth, "login").mockImplementation(() =>
+			Promise.resolve({
+				access_token: "access-xyz",
+				id_token: "id-xyz",
+				expires_at: Date.now() + 3_600_000,
+				user: { sub: "u", email: "test@example.com", displayName: "Test" },
+			}),
+		);
+		const fetchApiKeySpy = spyOn(proxy, "fetchApiKey")
+			.mockImplementationOnce(() =>
+				Promise.reject(new Error("Proxy /auth/exchange failed (502): boom")),
+			)
+			.mockImplementationOnce(() => Promise.resolve("sk-retry-ok"));
+		const configureSpy = spyOn(
+			configure,
+			"configureClaudeCode",
+		).mockReturnValue([
+			{
+				kind: "claude-settings",
+				sourcePath: "/tmp/x",
+				backupPath: "/tmp/x.b",
+			},
+		]);
+		// bun's spyOn keeps call counts across tests in the same file.
+		loginSpy.mockClear();
+		fetchApiKeySpy.mockClear();
+		configureSpy.mockClear();
+
+		const { stdin, frames } = render(<App />);
+		await advanceFromSelectToInstalling(stdin);
+		await pickSso(stdin);
+
+		// Wait for the first attempt to reject and the retry prompt to render.
+		await new Promise((r) => setTimeout(r, 150));
+		expect(allFrames(frames)).toContain(
+			"Login failed: Proxy /auth/exchange failed",
+		);
+		expect(allFrames(frames)).toContain("Press Enter to retry, Ctrl-C to quit");
+		expect(configureSpy).not.toHaveBeenCalled();
+
+		// Press Enter to retry; the second attempt resolves with sk-retry-ok.
+		stdin.write("\r");
+		await new Promise((r) => setTimeout(r, 1_300));
+
+		const history = allFrames(frames);
+		expect(history).toContain("Happy coding");
+		expect(loginSpy).toHaveBeenCalledTimes(2);
+		expect(fetchApiKeySpy).toHaveBeenCalledTimes(2);
+		expect(configureSpy).toHaveBeenCalledTimes(1);
+		expect(configureSpy).toHaveBeenCalledWith({ apiKey: "sk-retry-ok" });
+	});
 });
