@@ -349,7 +349,6 @@ async function getAuthCode(
 						? "Opening browser to end existing SSO session and re-login..."
 						: "Opening browser for SSO login...",
 				);
-				onLog(`If the browser does not open, paste this URL: ${initialUrl}`);
 				openBrowser(initialUrl);
 			});
 
