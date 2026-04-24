@@ -422,14 +422,36 @@ async function fetchUserInfo(accessToken: string) {
 	};
 }
 
+export interface BrowserCommand {
+	file: string;
+	args: string[];
+	options?: { windowsVerbatimArguments?: boolean };
+}
+
+export function buildBrowserCommand(
+	url: string,
+	platform: NodeJS.Platform,
+): BrowserCommand {
+	if (platform === "darwin") return { file: "open", args: [url] };
+	if (platform === "win32") {
+		// `start` is a cmd.exe built-in, not an executable, so it can't be
+		// spawned directly. The leading "" is `start`'s window-title argument —
+		// without it, `start` would treat a quoted URL as the title and open
+		// nothing. `windowsVerbatimArguments` hands the command line to cmd.exe
+		// with our quoting intact so URLs containing `&` aren't split as
+		// command separators.
+		return {
+			file: "cmd.exe",
+			args: ["/c", "start", '""', `"${url}"`],
+			options: { windowsVerbatimArguments: true },
+		};
+	}
+	return { file: "xdg-open", args: [url] };
+}
+
 function openBrowser(url: string) {
-	const cmd =
-		process.platform === "darwin"
-			? "open"
-			: process.platform === "win32"
-				? "start"
-				: "xdg-open";
-	execFile(cmd, [url]);
+	const { file, args, options } = buildBrowserCommand(url, process.platform);
+	execFile(file, args, options ?? {});
 }
 
 function escapeHtml(str: string): string {

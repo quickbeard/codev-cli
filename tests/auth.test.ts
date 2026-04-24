@@ -19,7 +19,13 @@ import {
 import * as os from "node:os";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AuthData, loadAuth, login, logout } from "@/auth.js";
+import {
+	type AuthData,
+	buildBrowserCommand,
+	loadAuth,
+	login,
+	logout,
+} from "@/auth.js";
 import { BASE_URL } from "@/const.js";
 
 const SSO_BASE_URL = `${BASE_URL}sso-wrapper`;
@@ -158,6 +164,45 @@ describe("logout", () => {
 	test("does not write marker when there was no auth file to remove", async () => {
 		expect(await logout()).toBe(false);
 		expect(existsSync(join(tempDir, ".codev", "force-login"))).toBe(false);
+	});
+});
+
+describe("buildBrowserCommand", () => {
+	const url = "https://example.com/authorize?a=1&b=2";
+
+	test("darwin uses `open` with the URL as the only argument", () => {
+		const cmd = buildBrowserCommand(url, "darwin");
+		expect(cmd.file).toBe("open");
+		expect(cmd.args).toEqual([url]);
+		expect(cmd.options).toBeUndefined();
+	});
+
+	test("linux uses `xdg-open` with the URL as the only argument", () => {
+		const cmd = buildBrowserCommand(url, "linux");
+		expect(cmd.file).toBe("xdg-open");
+		expect(cmd.args).toEqual([url]);
+		expect(cmd.options).toBeUndefined();
+	});
+
+	test("win32 wraps start in cmd.exe with verbatim-quoted URL", () => {
+		const cmd = buildBrowserCommand(url, "win32");
+		expect(cmd.file).toBe("cmd.exe");
+		// `start`'s first quoted arg is the window title; the URL follows in
+		// its own quoted arg so `&` isn't split as a command separator.
+		expect(cmd.args).toEqual(["/c", "start", '""', `"${url}"`]);
+		expect(cmd.options?.windowsVerbatimArguments).toBe(true);
+	});
+
+	test("win32 preserves ampersands and query separators inside the quoted URL", () => {
+		const cmd = buildBrowserCommand(
+			"https://example.com/path?x=1&y=2&z=3",
+			"win32",
+		);
+		const urlArg = cmd.args[3] ?? "";
+		expect(urlArg.startsWith('"')).toBe(true);
+		expect(urlArg.endsWith('"')).toBe(true);
+		expect(urlArg).toContain("&y=2");
+		expect(urlArg).toContain("&z=3");
 	});
 });
 
