@@ -16,6 +16,7 @@ Usage: codev <command> [options]
 
 Commands:
   install             Install and configure AI coding agents
+  update              Update installed AI coding agents
   claude              Run the Claude Code CLI (${link("https://code.claude.com/docs/en/cli-reference")})
   claude --restore    Restore ~/.claude/settings.json from ~/.claude/settings.json.backup
   opencode            Run the OpenCode CLI (${link("https://opencode.ai/docs/cli")})

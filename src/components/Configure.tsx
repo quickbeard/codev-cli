@@ -8,6 +8,7 @@ import {
 	configureOpenCode,
 	type Tool,
 } from "@/configure.js";
+import { HAPPY_CODING, HELP_HINT } from "@/const.js";
 
 interface ConfigureProps {
 	tools: Tool[];
@@ -93,10 +94,10 @@ export function Configure({ tools, creds, onDone }: ConfigureProps) {
 				<Box marginBottom={1} flexDirection="column">
 					{resumeMessage(tools)}
 					<Box marginTop={1}>
-						<Text dimColor>{"Run `codev --help` to see all commands."}</Text>
+						<Text dimColor>{HELP_HINT}</Text>
 					</Box>
 					<Text bold color="magenta">
-						{"🎉 Happy coding!"}
+						{HAPPY_CODING}
 					</Text>
 				</Box>
 			)}

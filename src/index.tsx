@@ -5,6 +5,7 @@ import { logout } from "@/auth.js";
 import { printHelp, printVersion } from "@/help.js";
 import { runRestore } from "@/restore.js";
 import { runAgent } from "@/run.js";
+import { UpdateApp } from "@/UpdateApp.js";
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -26,6 +27,16 @@ switch (command) {
 		const { waitUntilExit } = render(<App />);
 		await waitUntilExit();
 		process.exit(0);
+		break;
+	}
+	case "update": {
+		const { waitUntilExit } = render(<UpdateApp />);
+		try {
+			await waitUntilExit();
+			process.exit(0);
+		} catch {
+			process.exit(1);
+		}
 		break;
 	}
 	case "logout": {
