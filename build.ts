@@ -24,6 +24,9 @@ const result = await Bun.build({
 	target: "node",
 	format: "esm",
 	plugins: [shimDevtools],
+	// `open` ships platform-specific shell scripts that the bundler can't
+	// pull in as assets; keep it external so npm resolves it at install time.
+	external: ["open"],
 });
 
 if (!result.success) {

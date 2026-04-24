@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import {
 	chmodSync,
 	existsSync,
@@ -11,6 +10,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import open from "open";
 import { BASE_URL } from "@/const.js";
 
 const SSO_BASE_URL = `${BASE_URL}sso-wrapper`;
@@ -349,7 +349,6 @@ async function getAuthCode(
 						? "Opening browser to end existing SSO session and re-login..."
 						: "Opening browser for SSO login...",
 				);
-				onLog(`If the browser does not open, paste this URL: ${initialUrl}`);
 				openBrowser(initialUrl);
 			});
 
@@ -423,43 +422,21 @@ async function fetchUserInfo(accessToken: string) {
 	};
 }
 
-export interface BrowserCommand {
-	file: string;
-	args: string[];
-	options?: { windowsVerbatimArguments?: boolean };
-}
-
-export function buildBrowserCommand(
-	url: string,
-	platform: NodeJS.Platform,
-): BrowserCommand {
-	if (platform === "darwin") return { file: "open", args: [url] };
-	if (platform === "win32") {
-		// `start` is a cmd.exe built-in, not an executable, so we go through
-		// cmd.exe. Two quoting quirks drive this shape:
-		//   1. `start` uses its first quoted arg as the window title, so we
-		//      pass "" as the empty title before the URL.
-		//   2. cmd.exe's /c strips the first and last " from the command line
-		//      when special chars (like & in OAuth URLs) are present. `/s`
-		//      forces that strip-outer-quotes behavior predictably, and the
-		//      whole inner command is wrapped in an outer " pair so what's
-		//      left after stripping is our real command.
-		// `windowsVerbatimArguments` hands the command line to cmd.exe with
-		// our quoting intact. This is the same pattern used by the `open`
-		// npm package. URL quotes are backslash-escaped defensively.
-		const escaped = url.replace(/"/g, '\\"');
-		return {
-			file: "cmd.exe",
-			args: ["/s", "/c", `"start "" "${escaped}""`],
-			options: { windowsVerbatimArguments: true },
-		};
-	}
-	return { file: "xdg-open", args: [url] };
-}
+// Indirection layer so tests can spy on the browser launch without mocking
+// node:child_process. The `open` npm package handles every platform quirk
+// (cmd.exe quoting on Windows, xdg-open on Linux, WSL detection) that we
+// previously tried to get right by hand.
+export const browserOpener = {
+	open(url: string): Promise<unknown> {
+		return open(url);
+	},
+};
 
 function openBrowser(url: string) {
-	const { file, args, options } = buildBrowserCommand(url, process.platform);
-	execFile(file, args, options ?? {});
+	// Fire-and-forget: the loopback callback server resolves the login flow
+	// regardless of whether the browser actually launched, and the URL is
+	// already printed so the user can paste it as a fallback.
+	browserOpener.open(url).catch(() => {});
 }
 
 function escapeHtml(str: string): string {

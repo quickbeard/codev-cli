@@ -7,7 +7,6 @@ import {
 	spyOn,
 	test,
 } from "bun:test";
-import * as childProcess from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
@@ -21,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	type AuthData,
-	buildBrowserCommand,
+	browserOpener,
 	loadAuth,
 	login,
 	logout,
@@ -167,55 +166,6 @@ describe("logout", () => {
 	});
 });
 
-describe("buildBrowserCommand", () => {
-	const url = "https://example.com/authorize?a=1&b=2";
-
-	test("darwin uses `open` with the URL as the only argument", () => {
-		const cmd = buildBrowserCommand(url, "darwin");
-		expect(cmd.file).toBe("open");
-		expect(cmd.args).toEqual([url]);
-		expect(cmd.options).toBeUndefined();
-	});
-
-	test("linux uses `xdg-open` with the URL as the only argument", () => {
-		const cmd = buildBrowserCommand(url, "linux");
-		expect(cmd.file).toBe("xdg-open");
-		expect(cmd.args).toEqual([url]);
-		expect(cmd.options).toBeUndefined();
-	});
-
-	test("win32 wraps start in cmd.exe /s /c with outer-quoted inner command", () => {
-		const cmd = buildBrowserCommand(url, "win32");
-		expect(cmd.file).toBe("cmd.exe");
-		// /s /c tells cmd.exe to strip exactly the first and last " from the
-		// command string. We wrap the inner command in an outer " pair so
-		// what's left after stripping is `start "" "<url>"`.
-		expect(cmd.args).toEqual(["/s", "/c", `"start "" "${url}""`]);
-		expect(cmd.options?.windowsVerbatimArguments).toBe(true);
-	});
-
-	test("win32 preserves ampersands and query separators inside the quoted URL", () => {
-		const cmd = buildBrowserCommand(
-			"https://example.com/path?x=1&y=2&z=3",
-			"win32",
-		);
-		const commandArg = cmd.args[2] ?? "";
-		expect(commandArg).toContain("&y=2");
-		expect(commandArg).toContain("&z=3");
-		// Inner command should be surrounded by an outer " pair for /s /c.
-		expect(commandArg.startsWith('"')).toBe(true);
-		expect(commandArg.endsWith('"')).toBe(true);
-	});
-
-	test("win32 escapes literal double-quotes inside the URL", () => {
-		const cmd = buildBrowserCommand('https://example.com/?q="quoted"', "win32");
-		const commandArg = cmd.args[2] ?? "";
-		// Embedded " must be escaped so cmd.exe's quote-stripping only removes
-		// the outer pair, not something inside the URL.
-		expect(commandArg).toContain('\\"quoted\\"');
-	});
-});
-
 describe("login", () => {
 	test("returns existing auth when already logged in", async () => {
 		writeAuthFile(VALID_AUTH);
@@ -254,7 +204,7 @@ describe("login", () => {
 function getAuthorizeUrl(spy: ReturnType<typeof spyOn>): URL | null {
 	const call = spy.mock.calls[0];
 	if (!call) return null;
-	return new URL(call[1]?.[0] as string);
+	return new URL(call[0] as string);
 }
 
 function getCallbackPort(spy: ReturnType<typeof spyOn>): number {
@@ -274,7 +224,7 @@ function getCallbackNonce(spy: ReturnType<typeof spyOn>): string {
 
 describe("login full OAuth flow", () => {
 	let fetchSpy: ReturnType<typeof spyOn>;
-	let execFileSpy: ReturnType<typeof spyOn>;
+	let openBrowserSpy: ReturnType<typeof spyOn>;
 	const originalFetch = globalThis.fetch;
 
 	function mockSsoFetch() {
@@ -301,14 +251,14 @@ describe("login full OAuth flow", () => {
 	}
 
 	beforeEach(() => {
-		execFileSpy = spyOn(childProcess, "execFile").mockImplementation(
-			(() => {}) as unknown as typeof childProcess.execFile,
+		openBrowserSpy = spyOn(browserOpener, "open").mockImplementation(() =>
+			Promise.resolve(undefined),
 		);
 	});
 
 	afterEach(() => {
 		fetchSpy?.mockRestore();
-		execFileSpy?.mockRestore();
+		openBrowserSpy?.mockRestore();
 	});
 
 	test("exchanges code, saves auth to disk", async () => {
@@ -319,8 +269,8 @@ describe("login full OAuth flow", () => {
 			(msg) => logs.push(msg),
 			(openBrowserFn) => {
 				openBrowserFn();
-				const port = getCallbackPort(execFileSpy);
-				const state = getCallbackState(execFileSpy);
+				const port = getCallbackPort(openBrowserSpy);
+				const state = getCallbackState(openBrowserSpy);
 				setTimeout(() => {
 					originalFetch(
 						`http://localhost:${port}/callback?code=test-auth-code&state=${state}`,
@@ -348,8 +298,8 @@ describe("login full OAuth flow", () => {
 			() => {},
 			(openBrowserFn) => {
 				openBrowserFn();
-				const port = getCallbackPort(execFileSpy);
-				const state = getCallbackState(execFileSpy);
+				const port = getCallbackPort(openBrowserSpy);
+				const state = getCallbackState(openBrowserSpy);
 				setTimeout(() => {
 					originalFetch(
 						`http://localhost:${port}/callback?code=c&state=${state}`,
@@ -360,7 +310,7 @@ describe("login full OAuth flow", () => {
 
 		await loginPromise;
 
-		const nonce = getCallbackNonce(execFileSpy);
+		const nonce = getCallbackNonce(openBrowserSpy);
 		expect(nonce).toMatch(
 			/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
 		);
@@ -372,7 +322,7 @@ describe("login full OAuth flow", () => {
 			() => {},
 			(openBrowserFn) => {
 				openBrowserFn();
-				const port = getCallbackPort(execFileSpy);
+				const port = getCallbackPort(openBrowserSpy);
 				setTimeout(() => {
 					originalFetch(
 						`http://localhost:${port}/callback?error=access_denied&error_description=User+denied`,
@@ -390,7 +340,7 @@ describe("login full OAuth flow", () => {
 			() => {},
 			(openBrowserFn) => {
 				openBrowserFn();
-				const port = getCallbackPort(execFileSpy);
+				const port = getCallbackPort(openBrowserSpy);
 				setTimeout(() => {
 					originalFetch(
 						`http://localhost:${port}/callback?code=abc&state=wrong-state`,
@@ -408,7 +358,7 @@ describe("login full OAuth flow", () => {
 			() => {},
 			(openBrowserFn) => {
 				openBrowserFn();
-				const port = getCallbackPort(execFileSpy);
+				const port = getCallbackPort(openBrowserSpy);
 				setTimeout(() => {
 					originalFetch(`http://localhost:${port}/callback`);
 				}, 50);
@@ -426,7 +376,7 @@ describe("login full OAuth flow", () => {
 			() => {},
 			(openBrowserFn) => {
 				openBrowserFn();
-				callbackPort = getCallbackPort(execFileSpy);
+				callbackPort = getCallbackPort(openBrowserSpy);
 			},
 		);
 
@@ -447,8 +397,8 @@ describe("login full OAuth flow", () => {
 			() => {},
 			(openBrowserFn) => {
 				openBrowserFn();
-				const port = getCallbackPort(execFileSpy);
-				const state = getCallbackState(execFileSpy);
+				const port = getCallbackPort(openBrowserSpy);
+				const state = getCallbackState(openBrowserSpy);
 				callbackResPromise = new Promise((resolve) => {
 					setTimeout(async () => {
 						const res = await originalFetch(
@@ -476,7 +426,7 @@ describe("login full OAuth flow", () => {
 			() => {},
 			(openBrowserFn) => {
 				openBrowserFn();
-				const port = getCallbackPort(execFileSpy);
+				const port = getCallbackPort(openBrowserSpy);
 				setTimeout(async () => {
 					callbackRes = await originalFetch(
 						`http://localhost:${port}/callback?error=denied`,
@@ -512,8 +462,8 @@ describe("login full OAuth flow", () => {
 				() => {},
 				(openBrowserFn) => {
 					openBrowserFn();
-					const port = getCallbackPort(execFileSpy);
-					const state = getCallbackState(execFileSpy);
+					const port = getCallbackPort(openBrowserSpy);
+					const state = getCallbackState(openBrowserSpy);
 					setTimeout(async () => {
 						await Promise.all([
 							originalFetch(
@@ -554,8 +504,8 @@ describe("login full OAuth flow", () => {
 				() => {},
 				(openBrowserFn) => {
 					openBrowserFn();
-					port = getCallbackPort(execFileSpy);
-					const state = getCallbackState(execFileSpy);
+					port = getCallbackPort(openBrowserSpy);
+					const state = getCallbackState(openBrowserSpy);
 					setTimeout(() => {
 						originalFetch(
 							`http://localhost:${port}/callback?code=c&state=${state}`,
@@ -584,7 +534,7 @@ describe("login full OAuth flow", () => {
 
 describe("login with force-login marker", () => {
 	let fetchSpy: ReturnType<typeof spyOn>;
-	let execFileSpy: ReturnType<typeof spyOn>;
+	let openBrowserSpy: ReturnType<typeof spyOn>;
 	const originalFetch = globalThis.fetch;
 
 	function writeMarker() {
@@ -594,13 +544,13 @@ describe("login with force-login marker", () => {
 	}
 
 	function getInitialUrl(): URL {
-		const call = execFileSpy.mock.calls[0];
-		return new URL(call?.[1]?.[0] as string);
+		const call = openBrowserSpy.mock.calls[0];
+		return new URL(call?.[0] as string);
 	}
 
 	beforeEach(() => {
-		execFileSpy = spyOn(childProcess, "execFile").mockImplementation(
-			(() => {}) as unknown as typeof childProcess.execFile,
+		openBrowserSpy = spyOn(browserOpener, "open").mockImplementation(() =>
+			Promise.resolve(undefined),
 		);
 		fetchSpy = mockAuthFetch({
 			"/token": async () =>
@@ -626,7 +576,7 @@ describe("login with force-login marker", () => {
 
 	afterEach(() => {
 		fetchSpy?.mockRestore();
-		execFileSpy?.mockRestore();
+		openBrowserSpy?.mockRestore();
 	});
 
 	test("opens the wrapper /logout URL first instead of /authorize", async () => {
