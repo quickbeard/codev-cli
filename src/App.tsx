@@ -1,40 +1,60 @@
 import { Box, Text, useApp } from "ink";
 import { useCallback, useState } from "react";
+import type { AuthMethodChoice } from "@/components/AuthMethod.js";
+import { AuthMethod, authMethodTitle } from "@/components/AuthMethod.js";
 import { Banner } from "@/components/Banner.js";
 import { Configure, configureTitle } from "@/components/Configure.js";
 import { Confirm, confirmTitle } from "@/components/Confirm.js";
 import { Frame } from "@/components/Frame.js";
 import { Install } from "@/components/Install.js";
 import { Login, loginTitle } from "@/components/Login.js";
+import {
+	ManualCredentials,
+	type ManualCredentialsValue,
+	manualCredentialsTitle,
+} from "@/components/ManualCredentials.js";
 import { Step } from "@/components/Step.js";
 import { ToolSelect, toolSelectTitle } from "@/components/ToolSelect.js";
-import type { Tool } from "@/configure.js";
+import type { Credentials, Tool } from "@/configure.js";
 
 type Phase =
 	| "select"
 	| "confirm"
 	| "installing"
 	| "install-failed"
+	| "auth-method"
 	| "login"
 	| "login-failed"
+	| "manual-creds"
 	| "configuring"
 	| "configure-failed"
 	| "done";
 
 const POST_INSTALL: Phase[] = [
+	"auth-method",
 	"login",
 	"login-failed",
+	"manual-creds",
 	"configuring",
 	"configure-failed",
 	"done",
 ];
-const POST_LOGIN: Phase[] = ["configuring", "configure-failed", "done"];
+const POST_AUTH_METHOD: Phase[] = [
+	"login",
+	"login-failed",
+	"manual-creds",
+	"configuring",
+	"configure-failed",
+	"done",
+];
+const POST_AUTH: Phase[] = ["configuring", "configure-failed", "done"];
 
 export function App() {
 	const { exit } = useApp();
 	const [step, setStep] = useState<Phase>("select");
 	const [tools, setTools] = useState<Tool[]>([]);
-	const [apiKey, setApiKey] = useState<string | null>(null);
+	const [authMethod, setAuthMethod] = useState<AuthMethodChoice | null>(null);
+	const [creds, setCreds] = useState<Credentials | null>(null);
 
 	const handleConfirm = (selected: Tool[]) => {
 		setTools(selected);
@@ -57,7 +77,12 @@ export function App() {
 	// app is left to the user (Ctrl-C), matching Login/Configure's prior
 	// hang-on-error behavior.
 	const handleInstallDone = useCallback((success: boolean) => {
-		setStep(success ? "login" : "install-failed");
+		setStep(success ? "auth-method" : "install-failed");
+	}, []);
+
+	const handleAuthMethod = useCallback((choice: AuthMethodChoice) => {
+		setAuthMethod(choice);
+		setStep(choice === "sso" ? "login" : "manual-creds");
 	}, []);
 
 	const handleLoginDone = useCallback((key: string | null) => {
@@ -65,7 +90,16 @@ export function App() {
 			setStep("login-failed");
 			return;
 		}
-		setApiKey(key);
+		setCreds({ apiKey: key });
+		setStep("configuring");
+	}, []);
+
+	const handleManualDone = useCallback((value: ManualCredentialsValue) => {
+		setCreds({
+			apiKey: value.apiKey,
+			baseUrl: value.baseUrl,
+			model: value.model,
+		});
 		setStep("configuring");
 	}, []);
 
@@ -109,15 +143,38 @@ export function App() {
 					</Step>
 				)}
 				{POST_INSTALL.includes(step) && (
+					<Step
+						active={step === "auth-method"}
+						title={authMethodTitle(step !== "auth-method")}
+					>
+						<AuthMethod
+							onSelect={handleAuthMethod}
+							readOnly={step !== "auth-method"}
+							selected={authMethod}
+						/>
+					</Step>
+				)}
+				{POST_AUTH_METHOD.includes(step) && authMethod === "sso" && (
 					<Step active={step === "login"} title={loginTitle()}>
 						<Login onDone={handleLoginDone} />
 					</Step>
 				)}
-				{POST_LOGIN.includes(step) && apiKey && (
+				{POST_AUTH_METHOD.includes(step) && authMethod === "manual" && (
+					<Step
+						active={step === "manual-creds"}
+						title={manualCredentialsTitle()}
+					>
+						<ManualCredentials
+							onDone={handleManualDone}
+							readOnly={step !== "manual-creds"}
+						/>
+					</Step>
+				)}
+				{POST_AUTH.includes(step) && creds && (
 					<Step active={step === "configuring"} title={configureTitle()}>
 						<Configure
 							tools={tools}
-							apiKey={apiKey}
+							creds={creds}
 							onDone={handleConfigureDone}
 						/>
 					</Step>

@@ -86,7 +86,7 @@ describe("bypassClaudeLogin", () => {
 describe("configureClaudeCode", () => {
 	test("creates ~/.claude/settings.json with env block when file does not exist", async () => {
 		const { configureClaudeCode } = await import("@/configure.js");
-		configureClaudeCode("sk-abc");
+		configureClaudeCode({ apiKey: "sk-abc" });
 
 		const filePath = join(tempDir, ".claude", "settings.json");
 		expect(existsSync(filePath)).toBe(true);
@@ -108,7 +108,7 @@ describe("configureClaudeCode", () => {
 
 	test("also runs bypassClaudeLogin (creates .claude.json)", async () => {
 		const { configureClaudeCode } = await import("@/configure.js");
-		configureClaudeCode("sk-abc");
+		configureClaudeCode({ apiKey: "sk-abc" });
 
 		const claudeJson = join(tempDir, ".claude.json");
 		expect(existsSync(claudeJson)).toBe(true);
@@ -130,7 +130,7 @@ describe("configureClaudeCode", () => {
 		);
 
 		const { configureClaudeCode } = await import("@/configure.js");
-		const results = configureClaudeCode("sk-new");
+		const results = configureClaudeCode({ apiKey: "sk-new" });
 
 		const result = results.find((r) => r.kind === "claude-settings");
 		expect(result?.backupPath).toBe(backupPath);
@@ -153,7 +153,7 @@ describe("configureClaudeCode", () => {
 		writeFileSync(join(dir, "CLAUDE.md"), "user notes");
 
 		const { configureClaudeCode } = await import("@/configure.js");
-		configureClaudeCode("sk-new");
+		configureClaudeCode({ apiKey: "sk-new" });
 
 		expect(readFileSync(join(dir, "CLAUDE.md"), "utf-8")).toBe("user notes");
 		expect(existsSync(join(dir, "CLAUDE.md.backup"))).toBe(false);
@@ -171,7 +171,7 @@ describe("configureClaudeCode", () => {
 		);
 
 		const { configureClaudeCode } = await import("@/configure.js");
-		configureClaudeCode("sk-new");
+		configureClaudeCode({ apiKey: "sk-new" });
 
 		const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
 		expect(backup.marker).toBe("original");
@@ -181,7 +181,7 @@ describe("configureClaudeCode", () => {
 describe("configureOpenCode", () => {
 	test("creates ~/.config/opencode/opencode.json with aigateway provider when file does not exist", async () => {
 		const { configureOpenCode } = await import("@/configure.js");
-		configureOpenCode("sk-xyz");
+		configureOpenCode({ apiKey: "sk-xyz" });
 
 		const filePath = join(tempDir, ".config", "opencode", "opencode.json");
 		expect(existsSync(filePath)).toBe(true);
@@ -198,7 +198,7 @@ describe("configureOpenCode", () => {
 
 	test("does not touch ~/.claude.json (OpenCode-only install)", async () => {
 		const { configureOpenCode } = await import("@/configure.js");
-		configureOpenCode("sk-xyz");
+		configureOpenCode({ apiKey: "sk-xyz" });
 
 		expect(existsSync(join(tempDir, ".claude.json"))).toBe(false);
 	});
@@ -217,7 +217,7 @@ describe("configureOpenCode", () => {
 		);
 
 		const { configureOpenCode } = await import("@/configure.js");
-		const results = configureOpenCode("sk-new");
+		const results = configureOpenCode({ apiKey: "sk-new" });
 
 		expect(results[0]?.backupPath).toBe(backupPath);
 		const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
@@ -244,7 +244,7 @@ describe("configureOpenCode", () => {
 		);
 
 		const { configureOpenCode } = await import("@/configure.js");
-		const results = configureOpenCode("sk-new");
+		const results = configureOpenCode({ apiKey: "sk-new" });
 
 		const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
 		expect(backup.marker).toBe("original");
@@ -335,6 +335,149 @@ describe("restoreTool", () => {
 		expect(result.status).toBe("no-backup");
 		expect(result.backupPath).toBe(
 			join(tempDir, ".claude", "settings.json.backup"),
+		);
+	});
+});
+
+describe("configureClaudeCode with manual credentials", () => {
+	test("uses the supplied baseUrl and model verbatim when no v1 suffix", async () => {
+		const { configureClaudeCode } = await import("@/configure.js");
+		configureClaudeCode({
+			apiKey: "sk-user",
+			baseUrl: "https://example.com/api",
+			model: "my-model",
+		});
+
+		const config = JSON.parse(
+			readFileSync(join(tempDir, ".claude", "settings.json"), "utf-8"),
+		);
+		expect(config.env.ANTHROPIC_BASE_URL).toBe("https://example.com/api");
+		expect(config.env.ANTHROPIC_API_KEY).toBe("sk-user");
+		expect(config.env.ANTHROPIC_MODEL).toBe("my-model");
+		expect(config.env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("my-model");
+		expect(config.env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe("my-model");
+		expect(config.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("my-model");
+	});
+
+	test("strips trailing v1 from baseUrl", async () => {
+		const { configureClaudeCode } = await import("@/configure.js");
+		configureClaudeCode({
+			apiKey: "k",
+			baseUrl: "https://example.com/v1",
+			model: "m",
+		});
+
+		const config = JSON.parse(
+			readFileSync(join(tempDir, ".claude", "settings.json"), "utf-8"),
+		);
+		expect(config.env.ANTHROPIC_BASE_URL).toBe("https://example.com/");
+	});
+
+	test("strips trailing v1/ from baseUrl", async () => {
+		const { configureClaudeCode } = await import("@/configure.js");
+		configureClaudeCode({
+			apiKey: "k",
+			baseUrl: "https://example.com/v1/",
+			model: "m",
+		});
+
+		const config = JSON.parse(
+			readFileSync(join(tempDir, ".claude", "settings.json"), "utf-8"),
+		);
+		expect(config.env.ANTHROPIC_BASE_URL).toBe("https://example.com/");
+	});
+
+	test("only strips the trailing v1 segment", async () => {
+		const { configureClaudeCode } = await import("@/configure.js");
+		configureClaudeCode({
+			apiKey: "k",
+			baseUrl: "https://example.com/api/v1",
+			model: "m",
+		});
+
+		const config = JSON.parse(
+			readFileSync(join(tempDir, ".claude", "settings.json"), "utf-8"),
+		);
+		expect(config.env.ANTHROPIC_BASE_URL).toBe("https://example.com/api/");
+	});
+});
+
+describe("configureOpenCode with manual credentials", () => {
+	test("uses the supplied baseUrl and model when v1 already present", async () => {
+		const { configureOpenCode } = await import("@/configure.js");
+		configureOpenCode({
+			apiKey: "sk-user",
+			baseUrl: "https://example.com/v1",
+			model: "my-model",
+		});
+
+		const config = JSON.parse(
+			readFileSync(
+				join(tempDir, ".config", "opencode", "opencode.json"),
+				"utf-8",
+			),
+		);
+		expect(config.provider.aigateway.options.baseURL).toBe(
+			"https://example.com/v1",
+		);
+		expect(config.provider.aigateway.options.apiKey).toBe("sk-user");
+		expect(config.provider.aigateway.models["my-model"].name).toBe("my-model");
+	});
+
+	test("preserves trailing v1/", async () => {
+		const { configureOpenCode } = await import("@/configure.js");
+		configureOpenCode({
+			apiKey: "k",
+			baseUrl: "https://example.com/v1/",
+			model: "m",
+		});
+
+		const config = JSON.parse(
+			readFileSync(
+				join(tempDir, ".config", "opencode", "opencode.json"),
+				"utf-8",
+			),
+		);
+		expect(config.provider.aigateway.options.baseURL).toBe(
+			"https://example.com/v1/",
+		);
+	});
+
+	test("appends /v1 when URL has no trailing slash", async () => {
+		const { configureOpenCode } = await import("@/configure.js");
+		configureOpenCode({
+			apiKey: "k",
+			baseUrl: "https://example.com",
+			model: "m",
+		});
+
+		const config = JSON.parse(
+			readFileSync(
+				join(tempDir, ".config", "opencode", "opencode.json"),
+				"utf-8",
+			),
+		);
+		expect(config.provider.aigateway.options.baseURL).toBe(
+			"https://example.com/v1",
+		);
+	});
+
+	test("appends v1 when URL ends with a trailing slash", async () => {
+		const { configureOpenCode } = await import("@/configure.js");
+		configureOpenCode({
+			apiKey: "k",
+			baseUrl: "https://example.com/",
+			model: "m",
+		});
+
+		const config = JSON.parse(
+			readFileSync(
+				join(tempDir, ".config", "opencode", "opencode.json"),
+				"utf-8",
+			),
+		);
+		expect(config.provider.aigateway.options.baseURL).toBe(
+			"https://example.com/v1",
 		);
 	});
 });
