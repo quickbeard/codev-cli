@@ -349,6 +349,7 @@ async function getAuthCode(
 						? "Opening browser to end existing SSO session and re-login..."
 						: "Opening browser for SSO login...",
 				);
+				onLog(`If the browser does not open, paste this URL: ${initialUrl}`);
 				openBrowser(initialUrl);
 			});
 
@@ -434,15 +435,22 @@ export function buildBrowserCommand(
 ): BrowserCommand {
 	if (platform === "darwin") return { file: "open", args: [url] };
 	if (platform === "win32") {
-		// `start` is a cmd.exe built-in, not an executable, so it can't be
-		// spawned directly. The leading "" is `start`'s window-title argument —
-		// without it, `start` would treat a quoted URL as the title and open
-		// nothing. `windowsVerbatimArguments` hands the command line to cmd.exe
-		// with our quoting intact so URLs containing `&` aren't split as
-		// command separators.
+		// `start` is a cmd.exe built-in, not an executable, so we go through
+		// cmd.exe. Two quoting quirks drive this shape:
+		//   1. `start` uses its first quoted arg as the window title, so we
+		//      pass "" as the empty title before the URL.
+		//   2. cmd.exe's /c strips the first and last " from the command line
+		//      when special chars (like & in OAuth URLs) are present. `/s`
+		//      forces that strip-outer-quotes behavior predictably, and the
+		//      whole inner command is wrapped in an outer " pair so what's
+		//      left after stripping is our real command.
+		// `windowsVerbatimArguments` hands the command line to cmd.exe with
+		// our quoting intact. This is the same pattern used by the `open`
+		// npm package. URL quotes are backslash-escaped defensively.
+		const escaped = url.replace(/"/g, '\\"');
 		return {
 			file: "cmd.exe",
-			args: ["/c", "start", '""', `"${url}"`],
+			args: ["/s", "/c", `"start "" "${escaped}""`],
 			options: { windowsVerbatimArguments: true },
 		};
 	}

@@ -184,12 +184,13 @@ describe("buildBrowserCommand", () => {
 		expect(cmd.options).toBeUndefined();
 	});
 
-	test("win32 wraps start in cmd.exe with verbatim-quoted URL", () => {
+	test("win32 wraps start in cmd.exe /s /c with outer-quoted inner command", () => {
 		const cmd = buildBrowserCommand(url, "win32");
 		expect(cmd.file).toBe("cmd.exe");
-		// `start`'s first quoted arg is the window title; the URL follows in
-		// its own quoted arg so `&` isn't split as a command separator.
-		expect(cmd.args).toEqual(["/c", "start", '""', `"${url}"`]);
+		// /s /c tells cmd.exe to strip exactly the first and last " from the
+		// command string. We wrap the inner command in an outer " pair so
+		// what's left after stripping is `start "" "<url>"`.
+		expect(cmd.args).toEqual(["/s", "/c", `"start "" "${url}""`]);
 		expect(cmd.options?.windowsVerbatimArguments).toBe(true);
 	});
 
@@ -198,11 +199,20 @@ describe("buildBrowserCommand", () => {
 			"https://example.com/path?x=1&y=2&z=3",
 			"win32",
 		);
-		const urlArg = cmd.args[3] ?? "";
-		expect(urlArg.startsWith('"')).toBe(true);
-		expect(urlArg.endsWith('"')).toBe(true);
-		expect(urlArg).toContain("&y=2");
-		expect(urlArg).toContain("&z=3");
+		const commandArg = cmd.args[2] ?? "";
+		expect(commandArg).toContain("&y=2");
+		expect(commandArg).toContain("&z=3");
+		// Inner command should be surrounded by an outer " pair for /s /c.
+		expect(commandArg.startsWith('"')).toBe(true);
+		expect(commandArg.endsWith('"')).toBe(true);
+	});
+
+	test("win32 escapes literal double-quotes inside the URL", () => {
+		const cmd = buildBrowserCommand('https://example.com/?q="quoted"', "win32");
+		const commandArg = cmd.args[2] ?? "";
+		// Embedded " must be escaped so cmd.exe's quote-stripping only removes
+		// the outer pair, not something inside the URL.
+		expect(commandArg).toContain('\\"quoted\\"');
 	});
 });
 
