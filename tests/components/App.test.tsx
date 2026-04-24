@@ -42,6 +42,43 @@ async function advanceFromSelectToInstalling(stdin: {
 	await new Promise((r) => setTimeout(r, 30));
 }
 
+async function pickSso(stdin: { write: (s: string) => void }) {
+	// Wait for install to settle and the auth-method screen to appear, then
+	// press Enter to pick the default "Login to SSO" option.
+	await new Promise((r) => setTimeout(r, 100));
+	stdin.write("\r");
+	await new Promise((r) => setTimeout(r, 30));
+}
+
+async function pickManual(stdin: { write: (s: string) => void }) {
+	// Wait for install to settle, move cursor to "I have my own API Key", Enter.
+	await new Promise((r) => setTimeout(r, 100));
+	stdin.write("[B"); // down arrow
+	await new Promise((r) => setTimeout(r, 30));
+	stdin.write("\r");
+	await new Promise((r) => setTimeout(r, 30));
+}
+
+async function typeManualCreds(
+	stdin: { write: (s: string) => void },
+	baseUrl: string,
+	apiKey: string,
+	model: string,
+) {
+	stdin.write(baseUrl);
+	await new Promise((r) => setTimeout(r, 30));
+	stdin.write("\r");
+	await new Promise((r) => setTimeout(r, 30));
+	stdin.write(apiKey);
+	await new Promise((r) => setTimeout(r, 30));
+	stdin.write("\r");
+	await new Promise((r) => setTimeout(r, 30));
+	stdin.write(model);
+	await new Promise((r) => setTimeout(r, 30));
+	stdin.write("\r");
+	await new Promise((r) => setTimeout(r, 30));
+}
+
 // `useApp().exit()` unmounts the tree so the final `lastFrame()` is blank.
 // Inspect the full frame history instead to assert what the app did render.
 function allFrames(frames: string[]): string {
@@ -82,6 +119,7 @@ describe("App fail-stop invariant", () => {
 
 		const { stdin, frames } = render(<App />);
 		await advanceFromSelectToInstalling(stdin);
+		await pickSso(stdin);
 		await new Promise((r) => setTimeout(r, 200));
 
 		const history = allFrames(frames);
@@ -108,6 +146,7 @@ describe("App fail-stop invariant", () => {
 
 		const { stdin, frames } = render(<App />);
 		await advanceFromSelectToInstalling(stdin);
+		await pickSso(stdin);
 		await new Promise((r) => setTimeout(r, 300));
 
 		const history = allFrames(frames);
@@ -127,7 +166,10 @@ describe("App fail-stop invariant", () => {
 			}),
 		);
 		spyOn(proxy, "fetchApiKey").mockResolvedValue("sk-test-123");
-		spyOn(configure, "configureClaudeCode").mockReturnValue([
+		const configureSpy = spyOn(
+			configure,
+			"configureClaudeCode",
+		).mockReturnValue([
 			{
 				kind: "claude-settings",
 				sourcePath: "/tmp/x",
@@ -137,9 +179,58 @@ describe("App fail-stop invariant", () => {
 
 		const { stdin, frames } = render(<App />);
 		await advanceFromSelectToInstalling(stdin);
+		await pickSso(stdin);
 		await new Promise((r) => setTimeout(r, 1_300));
 
 		const history = allFrames(frames);
 		expect(history).toContain("Happy coding");
+		expect(configureSpy).toHaveBeenCalledWith({ apiKey: "sk-test-123" });
+	});
+
+	test("manual-credentials flow reaches the done screen", async () => {
+		stubExecFile(() => ({ stdout: "ok" }));
+		// bun's spyOn keeps call counts across tests in the same file, so re-
+		// stub the SSO deps and then reset their counters before asserting.
+		const loginSpy = spyOn(auth, "login").mockImplementation(
+			() => new Promise(() => {}),
+		);
+		const fetchApiKeySpy = spyOn(proxy, "fetchApiKey").mockImplementation(
+			() => new Promise(() => {}),
+		);
+		const configureSpy = spyOn(
+			configure,
+			"configureClaudeCode",
+		).mockReturnValue([
+			{
+				kind: "claude-settings",
+				sourcePath: "/tmp/x",
+				backupPath: "/tmp/x.b",
+			},
+		]);
+		loginSpy.mockClear();
+		fetchApiKeySpy.mockClear();
+		configureSpy.mockClear();
+
+		const { stdin, frames } = render(<App />);
+		await advanceFromSelectToInstalling(stdin);
+		await pickManual(stdin);
+		await typeManualCreds(
+			stdin,
+			"https://my-gateway.example.com/v1",
+			"sk-manual-123",
+			"custom-model",
+		);
+		await new Promise((r) => setTimeout(r, 1_300));
+
+		const history = allFrames(frames);
+		expect(history).toContain("Enter API credentials");
+		expect(history).toContain("Happy coding");
+		expect(loginSpy).not.toHaveBeenCalled();
+		expect(fetchApiKeySpy).not.toHaveBeenCalled();
+		expect(configureSpy).toHaveBeenCalledWith({
+			apiKey: "sk-manual-123",
+			baseUrl: "https://my-gateway.example.com/v1",
+			model: "custom-model",
+		});
 	});
 });

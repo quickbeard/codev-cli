@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
 	type BackupKind,
 	type ConfigureResult,
+	type Credentials,
 	configureClaudeCode,
 	configureOpenCode,
 	type Tool,
@@ -10,7 +11,7 @@ import {
 
 interface ConfigureProps {
 	tools: Tool[];
-	apiKey: string;
+	creds: Credentials;
 	onDone: (success: boolean) => void;
 }
 
@@ -51,7 +52,7 @@ function describeResult(r: ConfigureResult): string[] {
 	return [`Configured ${LABEL[r.kind]}`];
 }
 
-export function Configure({ tools, apiKey, onDone }: ConfigureProps) {
+export function Configure({ tools, creds, onDone }: ConfigureProps) {
 	const [phase, setPhase] = useState<Phase>("running");
 	const [logs, setLogs] = useState<string[]>([]);
 	const [error, setError] = useState<string | null>(null);
@@ -64,9 +65,9 @@ export function Configure({ tools, apiKey, onDone }: ConfigureProps) {
 			const results: ConfigureResult[] = [];
 			for (const tool of tools) {
 				if (tool === "claude-code") {
-					results.push(...configureClaudeCode(apiKey));
+					results.push(...configureClaudeCode(creds));
 				} else if (tool === "opencode") {
-					results.push(...configureOpenCode(apiKey));
+					results.push(...configureOpenCode(creds));
 				}
 			}
 			const next: string[] = [];
@@ -81,7 +82,7 @@ export function Configure({ tools, apiKey, onDone }: ConfigureProps) {
 			setPhase("error");
 			onDone(false);
 		}
-	}, [phase, tools, apiKey, onDone]);
+	}, [phase, tools, creds, onDone]);
 
 	return (
 		<Box flexDirection="column">

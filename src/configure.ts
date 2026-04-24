@@ -29,6 +29,25 @@ export interface ConfigureResult {
 	backupPath: string | null;
 }
 
+export interface Credentials {
+	apiKey: string;
+	baseUrl?: string;
+	model?: string;
+}
+
+// Claude Code's ANTHROPIC_BASE_URL is a server root, not an OpenAI-style /v1
+// endpoint, so strip a trailing "v1" or "v1/" the user may have entered.
+function normalizeClaudeBaseUrl(url: string): string {
+	return url.replace(/v1\/?$/, "");
+}
+
+// OpenCode's OpenAI-compatible provider expects the /v1 endpoint. Preserve
+// any trailing "v1" or "v1/" the user entered; otherwise append "/v1".
+function normalizeOpenCodeBaseUrl(url: string): string {
+	if (/v1\/?$/.test(url)) return url;
+	return url.endsWith("/") ? `${url}v1` : `${url}/v1`;
+}
+
 const GATEWAY_BASE_URL = `${BASE_URL}gateway/`;
 const GATEWAY_OPENAI_BASE_URL = `${GATEWAY_BASE_URL}v1`;
 const MODEL_NAME = atob("TWluaU1heA==");
@@ -131,22 +150,27 @@ export function bypassClaudeLogin(): void {
 	}
 }
 
-export function configureClaudeCode(apiKey: string): ConfigureResult[] {
+export function configureClaudeCode(creds: Credentials): ConfigureResult[] {
 	bypassClaudeLogin();
 
 	const backupPath = ensureBackup("claude-settings");
 	const sourcePath = sourcePathOf("claude-settings");
 	mkdirSync(dirname(sourcePath), { recursive: true });
 
+	const baseUrl = creds.baseUrl
+		? normalizeClaudeBaseUrl(creds.baseUrl)
+		: GATEWAY_BASE_URL;
+	const model = creds.model ?? MODEL_NAME;
+
 	writeJson(sourcePath, {
 		[CLAUDE_K.schema]: CLAUDE_SCHEMA_URL,
 		[CLAUDE_K.env]: {
-			[CLAUDE_K.baseUrl]: GATEWAY_BASE_URL,
-			[CLAUDE_K.apiKey]: apiKey,
-			[CLAUDE_K.model]: MODEL_NAME,
-			[CLAUDE_K.opus]: MODEL_NAME,
-			[CLAUDE_K.sonnet]: MODEL_NAME,
-			[CLAUDE_K.haiku]: MODEL_NAME,
+			[CLAUDE_K.baseUrl]: baseUrl,
+			[CLAUDE_K.apiKey]: creds.apiKey,
+			[CLAUDE_K.model]: model,
+			[CLAUDE_K.opus]: model,
+			[CLAUDE_K.sonnet]: model,
+			[CLAUDE_K.haiku]: model,
 			[CLAUDE_K.agentTeams]: "1",
 		},
 	});
@@ -177,10 +201,15 @@ export function restoreTool(tool: Tool): RestoreResult {
 	return { status: "restored", sourcePath, backupPath };
 }
 
-export function configureOpenCode(apiKey: string): ConfigureResult[] {
+export function configureOpenCode(creds: Credentials): ConfigureResult[] {
 	const backupPath = ensureBackup("opencode-config");
 	const sourcePath = sourcePathOf("opencode-config");
 	mkdirSync(dirname(sourcePath), { recursive: true });
+
+	const baseUrl = creds.baseUrl
+		? normalizeOpenCodeBaseUrl(creds.baseUrl)
+		: GATEWAY_OPENAI_BASE_URL;
+	const model = creds.model ?? MODEL_NAME;
 
 	writeJson(sourcePath, {
 		[OPENCODE_K.schema]: OPENCODE_SCHEMA_URL,
@@ -189,12 +218,12 @@ export function configureOpenCode(apiKey: string): ConfigureResult[] {
 				[OPENCODE_K.npm]: OPENCODE_K.npmPkg,
 				[OPENCODE_K.name]: OPENCODE_K.displayName,
 				[OPENCODE_K.options]: {
-					[OPENCODE_K.baseURL]: GATEWAY_OPENAI_BASE_URL,
-					[OPENCODE_K.apiKey]: apiKey,
+					[OPENCODE_K.baseURL]: baseUrl,
+					[OPENCODE_K.apiKey]: creds.apiKey,
 				},
 				[OPENCODE_K.models]: {
-					[MODEL_NAME]: {
-						[OPENCODE_K.name]: MODEL_NAME,
+					[model]: {
+						[OPENCODE_K.name]: model,
 					},
 				},
 			},
