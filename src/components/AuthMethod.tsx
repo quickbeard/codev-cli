@@ -60,7 +60,7 @@ export function authMethodTitle(readOnly = false) {
 	return (
 		<Text bold>
 			{"Choose authentication method "}
-			{!readOnly && <Text dimColor>(↑/↓ to move, enter to confirm)</Text>}
+			{!readOnly && <Text dimColor>(↑/↓ to move, press Enter to confirm)</Text>}
 		</Text>
 	);
 }

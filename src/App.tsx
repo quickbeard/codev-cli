@@ -24,7 +24,6 @@ type Phase =
 	| "install-failed"
 	| "auth-method"
 	| "login"
-	| "login-failed"
 	| "manual-creds"
 	| "configuring"
 	| "configure-failed"
@@ -33,7 +32,6 @@ type Phase =
 const POST_INSTALL: Phase[] = [
 	"auth-method",
 	"login",
-	"login-failed",
 	"manual-creds",
 	"configuring",
 	"configure-failed",
@@ -41,7 +39,6 @@ const POST_INSTALL: Phase[] = [
 ];
 const POST_AUTH_METHOD: Phase[] = [
 	"login",
-	"login-failed",
 	"manual-creds",
 	"configuring",
 	"configure-failed",
@@ -85,11 +82,7 @@ export function App() {
 		setStep(choice === "sso" ? "login" : "manual-creds");
 	}, []);
 
-	const handleLoginDone = useCallback((key: string | null) => {
-		if (key === null) {
-			setStep("login-failed");
-			return;
-		}
+	const handleLoginDone = useCallback((key: string) => {
 		setCreds({ apiKey: key });
 		setStep("configuring");
 	}, []);
