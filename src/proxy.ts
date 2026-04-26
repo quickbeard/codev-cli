@@ -28,8 +28,6 @@ export async function fetchApiKey(accessToken: string): Promise<string> {
 	}
 
 	const data = (await res.json()) as ExchangeResponse;
-	if (!data.api_key) {
-		throw new Error("Proxy returned no api_key");
-	}
-	return data.api_key;
+	// Empty key is not thrown — callers route to manual-credentials fallback.
+	return data.api_key ?? "";
 }
