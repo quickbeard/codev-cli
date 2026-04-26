@@ -7,13 +7,14 @@ afterEach(() => {
 });
 
 describe("ToolSelect", () => {
-	test("renders both tool options", () => {
+	test("renders all tool options", () => {
 		const onConfirm = mock();
 		const { lastFrame } = render(<ToolSelect onConfirm={onConfirm} />);
 
 		const output = lastFrame() ?? "";
 		expect(output).toContain("Claude Code");
 		expect(output).toContain("OpenCode");
+		expect(output).toContain("Codex");
 	});
 
 	test("renders unchecked checkboxes by default", () => {
@@ -73,7 +74,21 @@ describe("ToolSelect", () => {
 		stdin.write("\r");
 		await new Promise((r) => setTimeout(r, 50));
 
-		expect(onConfirm).toHaveBeenCalledWith(["claude-code", "opencode"]);
+		expect(onConfirm).toHaveBeenCalledWith(["claude-code", "codex"]);
+	});
+
+	test("can select Codex by moving cursor down once", async () => {
+		const onConfirm = mock();
+		const { stdin } = render(<ToolSelect onConfirm={onConfirm} />);
+
+		stdin.write("\x1B[B");
+		await new Promise((r) => setTimeout(r, 50));
+		stdin.write(" ");
+		await new Promise((r) => setTimeout(r, 50));
+		stdin.write("\r");
+		await new Promise((r) => setTimeout(r, 50));
+
+		expect(onConfirm).toHaveBeenCalledWith(["codex"]);
 	});
 
 	test("can deselect a tool", async () => {

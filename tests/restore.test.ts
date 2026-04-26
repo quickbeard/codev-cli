@@ -119,4 +119,41 @@ describe("runRestore", () => {
 			),
 		).toBe(true);
 	});
+
+	test("restores Codex from backup and prints success", () => {
+		const { livePath, backupPath } = seedBackup(
+			".codex/config.toml",
+			"codex-backup",
+		);
+
+		const code = runRestore("codex");
+
+		expect(code).toBe(0);
+		expect(existsSync(backupPath)).toBe(false);
+		expect(existsSync(livePath)).toBe(true);
+
+		const logs = logSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+		expect(
+			logs.some(
+				(l: string) =>
+					l.startsWith("Restored ") &&
+					l.includes(livePath) &&
+					l.includes(backupPath),
+			),
+		).toBe(true);
+	});
+
+	test("returns 1 and prints no-backup error for Codex", () => {
+		const code = runRestore("codex");
+
+		expect(code).toBe(1);
+		const errors = errorSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+		expect(
+			errors.some(
+				(e: string) =>
+					e.startsWith("No backup found at") &&
+					e.includes(join(tempDir, ".codex", "config.toml.backup")),
+			),
+		).toBe(true);
+	});
 });

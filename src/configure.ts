@@ -10,10 +10,11 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import TOML from "@iarna/toml";
 import { BASE_URL } from "@/const.js";
 
-export type Tool = "claude-code" | "opencode";
-export type BackupKind = "claude-settings" | "opencode-config";
+export type Tool = "claude-code" | "codex" | "opencode";
+export type BackupKind = "claude-settings" | "codex-config" | "opencode-config";
 
 export interface BackupStatus {
 	kind: BackupKind;
@@ -67,6 +68,19 @@ const CLAUDE_K = {
 	agentTeams: atob("Q0xBVURFX0NPREVfRVhQRVJJTUVOVEFMX0FHRU5UX1RFQU1T"),
 };
 
+const CODEX_K = {
+	model: atob("bW9kZWw="),
+	modelProvider: atob("bW9kZWxfcHJvdmlkZXI="),
+	modelProviders: atob("bW9kZWxfcHJvdmlkZXJz"),
+	providerId: atob("YWlnYXRld2F5"),
+	name: atob("bmFtZQ=="),
+	displayName: atob("QUkgR2F0ZXdheQ=="),
+	baseUrl: atob("YmFzZV91cmw="),
+	wireApi: atob("d2lyZV9hcGk="),
+	wireApiValue: atob("cmVzcG9uc2Vz"),
+	bearerToken: atob("ZXhwZXJpbWVudGFsX2JlYXJlcl90b2tlbg=="),
+};
+
 const OPENCODE_SCHEMA_URL = atob(
 	"aHR0cHM6Ly9vcGVuY29kZS5haS9jb25maWcuanNvbg==",
 );
@@ -88,6 +102,8 @@ function sourcePathOf(kind: BackupKind): string {
 	switch (kind) {
 		case "claude-settings":
 			return join(homedir(), ".claude", "settings.json");
+		case "codex-config":
+			return join(homedir(), ".codex", "config.toml");
 		case "opencode-config":
 			return join(homedir(), ".config", "opencode", "opencode.json");
 	}
@@ -108,6 +124,9 @@ function statusFor(kind: BackupKind): BackupStatus {
 export function getBackupStatus(tool: Tool): BackupStatus[] {
 	if (tool === "claude-code") {
 		return [statusFor("claude-settings")];
+	}
+	if (tool === "codex") {
+		return [statusFor("codex-config")];
 	}
 	return [statusFor("opencode-config")];
 }
@@ -138,6 +157,11 @@ function readJson(path: string): Record<string, unknown> {
 
 function writeJson(path: string, data: unknown) {
 	writeFileSync(path, JSON.stringify(data, null, 2), { mode: 0o600 });
+	chmodSync(path, 0o600);
+}
+
+function writeToml(path: string, data: TOML.JsonMap) {
+	writeFileSync(path, TOML.stringify(data), { mode: 0o600 });
 	chmodSync(path, 0o600);
 }
 
@@ -188,7 +212,11 @@ export interface RestoreResult {
 
 export function restoreTool(tool: Tool): RestoreResult {
 	const kind: BackupKind =
-		tool === "claude-code" ? "claude-settings" : "opencode-config";
+		tool === "claude-code"
+			? "claude-settings"
+			: tool === "codex"
+				? "codex-config"
+				: "opencode-config";
 	const sourcePath = sourcePathOf(kind);
 	const backupPath = `${sourcePath}.backup`;
 
@@ -199,6 +227,32 @@ export function restoreTool(tool: Tool): RestoreResult {
 	rmSync(sourcePath, { force: true });
 	renameSync(backupPath, sourcePath);
 	return { status: "restored", sourcePath, backupPath };
+}
+
+export function configureCodex(creds: Credentials): ConfigureResult[] {
+	const backupPath = ensureBackup("codex-config");
+	const sourcePath = sourcePathOf("codex-config");
+	mkdirSync(dirname(sourcePath), { recursive: true });
+
+	const baseUrl = creds.baseUrl
+		? normalizeOpenCodeBaseUrl(creds.baseUrl)
+		: GATEWAY_OPENAI_BASE_URL;
+	const model = creds.model ?? MODEL_NAME;
+
+	writeToml(sourcePath, {
+		[CODEX_K.model]: model,
+		[CODEX_K.modelProvider]: CODEX_K.providerId,
+		[CODEX_K.modelProviders]: {
+			[CODEX_K.providerId]: {
+				[CODEX_K.name]: CODEX_K.displayName,
+				[CODEX_K.baseUrl]: baseUrl,
+				[CODEX_K.wireApi]: CODEX_K.wireApiValue,
+				[CODEX_K.bearerToken]: creds.apiKey,
+			},
+		},
+	});
+
+	return [{ kind: "codex-config", sourcePath, backupPath }];
 }
 
 export function configureOpenCode(creds: Credentials): ConfigureResult[] {

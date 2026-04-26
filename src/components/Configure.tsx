@@ -5,6 +5,7 @@ import {
 	type ConfigureResult,
 	type Credentials,
 	configureClaudeCode,
+	configureCodex,
 	configureOpenCode,
 	type Tool,
 } from "@/configure.js";
@@ -20,11 +21,13 @@ type Phase = "running" | "done" | "error";
 
 const LABEL: Record<BackupKind, string> = {
 	"claude-settings": "Claude Code",
+	"codex-config": "Codex",
 	"opencode-config": "OpenCode",
 };
 
 const RUN_CMD: Record<Tool, string> = {
 	"claude-code": "codev claude",
+	codex: "codev codex",
 	opencode: "codev opencode",
 };
 
@@ -67,6 +70,8 @@ export function Configure({ tools, creds, onDone }: ConfigureProps) {
 			for (const tool of tools) {
 				if (tool === "claude-code") {
 					results.push(...configureClaudeCode(creds));
+				} else if (tool === "codex") {
+					results.push(...configureCodex(creds));
 				} else if (tool === "opencode") {
 					results.push(...configureOpenCode(creds));
 				}

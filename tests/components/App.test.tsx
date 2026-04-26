@@ -42,6 +42,20 @@ async function advanceFromSelectToInstalling(stdin: {
 	await new Promise((r) => setTimeout(r, 30));
 }
 
+async function advanceFromSelectToInstallingCodex(stdin: {
+	write: (s: string) => void;
+}) {
+	// Move cursor to the second option (Codex), select, confirm, accept warning.
+	stdin.write("\x1B[B");
+	await new Promise((r) => setTimeout(r, 30));
+	stdin.write(" ");
+	await new Promise((r) => setTimeout(r, 30));
+	stdin.write("\r");
+	await new Promise((r) => setTimeout(r, 30));
+	stdin.write("y");
+	await new Promise((r) => setTimeout(r, 30));
+}
+
 async function pickSso(stdin: { write: (s: string) => void }) {
 	// Wait for install to settle and the auth-method screen to appear, then
 	// press Enter to pick the default "Login to SSO" option.
@@ -185,6 +199,42 @@ describe("App fail-stop invariant", () => {
 		const history = allFrames(frames);
 		expect(history).toContain("Happy coding");
 		expect(configureSpy).toHaveBeenCalledWith({ apiKey: "sk-test-123" });
+	});
+
+	test("Codex selection routes to configureCodex and reaches done", async () => {
+		stubExecFile(() => ({ stdout: "ok" }));
+		spyOn(auth, "login").mockImplementation(() =>
+			Promise.resolve({
+				access_token: "access-xyz",
+				id_token: "id-xyz",
+				expires_at: Date.now() + 3_600_000,
+				user: { sub: "u", email: "test@example.com", displayName: "Test" },
+			}),
+		);
+		spyOn(proxy, "fetchApiKey").mockResolvedValue("sk-codex-123");
+		const configureCodexSpy = spyOn(
+			configure,
+			"configureCodex",
+		).mockReturnValue([
+			{
+				kind: "codex-config",
+				sourcePath: "/tmp/codex.toml",
+				backupPath: "/tmp/codex.toml.backup",
+			},
+		]);
+		// bun's spyOn keeps call counts across tests in the same file.
+		configureCodexSpy.mockClear();
+
+		const { stdin, frames } = render(<App />);
+		await advanceFromSelectToInstallingCodex(stdin);
+		await pickSso(stdin);
+		await new Promise((r) => setTimeout(r, 1_300));
+
+		const history = allFrames(frames);
+		expect(history).toContain("Happy coding");
+		expect(history).toContain("codev codex");
+		expect(configureCodexSpy).toHaveBeenCalledTimes(1);
+		expect(configureCodexSpy).toHaveBeenCalledWith({ apiKey: "sk-codex-123" });
 	});
 
 	test("manual-credentials flow reaches the done screen", async () => {

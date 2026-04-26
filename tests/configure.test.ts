@@ -10,6 +10,7 @@ import {
 import * as os from "node:os";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import TOML from "@iarna/toml";
 import { BASE_URL } from "@/const.js";
 
 let tempDir: string;
@@ -255,6 +256,135 @@ describe("configureOpenCode", () => {
 	});
 });
 
+describe("configureCodex", () => {
+	function readCodexToml() {
+		return TOML.parse(
+			readFileSync(join(tempDir, ".codex", "config.toml"), "utf-8"),
+		) as {
+			model: string;
+			model_provider: string;
+			model_providers: Record<
+				string,
+				{
+					name: string;
+					base_url: string;
+					wire_api: string;
+					experimental_bearer_token: string;
+				}
+			>;
+		};
+	}
+
+	test("creates ~/.codex/config.toml with aigateway provider when file does not exist", async () => {
+		const { configureCodex } = await import("@/configure.js");
+		configureCodex({ apiKey: "sk-codex" });
+
+		const filePath = join(tempDir, ".codex", "config.toml");
+		expect(existsSync(filePath)).toBe(true);
+
+		const config = readCodexToml();
+		expect(config.model).toBe("MiniMax");
+		expect(config.model_provider).toBe("aigateway");
+		expect(config.model_providers.aigateway).toBeDefined();
+		expect(config.model_providers.aigateway?.name).toBe("AI Gateway");
+		expect(config.model_providers.aigateway?.base_url).toBe(
+			`${BASE_URL}gateway/v1`,
+		);
+		expect(config.model_providers.aigateway?.wire_api).toBe("responses");
+		expect(config.model_providers.aigateway?.experimental_bearer_token).toBe(
+			"sk-codex",
+		);
+	});
+
+	test("does not touch ~/.claude.json (Codex-only install)", async () => {
+		const { configureCodex } = await import("@/configure.js");
+		configureCodex({ apiKey: "sk-codex" });
+
+		expect(existsSync(join(tempDir, ".claude.json"))).toBe(false);
+	});
+
+	test("replaces existing config.toml and backs up the file", async () => {
+		const dir = join(tempDir, ".codex");
+		const filePath = join(dir, "config.toml");
+		const backupPath = `${filePath}.backup`;
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(filePath, 'model = "old"\nother = "keep"\n');
+
+		const { configureCodex } = await import("@/configure.js");
+		const results = configureCodex({ apiKey: "sk-new" });
+
+		expect(results[0]?.backupPath).toBe(backupPath);
+		expect(existsSync(backupPath)).toBe(true);
+
+		const backup = readFileSync(backupPath, "utf-8");
+		expect(backup).toContain('model = "old"');
+		expect(backup).toContain('other = "keep"');
+
+		const config = readCodexToml();
+		expect(config.model_providers.aigateway?.experimental_bearer_token).toBe(
+			"sk-new",
+		);
+	});
+
+	test("preserves a pre-existing config.toml backup across repeated runs", async () => {
+		const dir = join(tempDir, ".codex");
+		const filePath = join(dir, "config.toml");
+		const backupPath = `${filePath}.backup`;
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(backupPath, 'marker = "original"\n');
+		writeFileSync(filePath, 'marker = "prev-codev-run"\n');
+
+		const { configureCodex } = await import("@/configure.js");
+		configureCodex({ apiKey: "sk-new" });
+
+		const backup = readFileSync(backupPath, "utf-8");
+		expect(backup).toContain('marker = "original"');
+	});
+
+	test("uses supplied baseUrl with /v1 already present", async () => {
+		const { configureCodex } = await import("@/configure.js");
+		configureCodex({
+			apiKey: "k",
+			baseUrl: "https://example.com/v1",
+			model: "m",
+		});
+
+		const config = readCodexToml();
+		expect(config.model_providers.aigateway?.base_url).toBe(
+			"https://example.com/v1",
+		);
+		expect(config.model).toBe("m");
+	});
+
+	test("appends /v1 when baseUrl has no trailing slash", async () => {
+		const { configureCodex } = await import("@/configure.js");
+		configureCodex({
+			apiKey: "k",
+			baseUrl: "https://example.com",
+			model: "m",
+		});
+
+		const config = readCodexToml();
+		expect(config.model_providers.aigateway?.base_url).toBe(
+			"https://example.com/v1",
+		);
+	});
+
+	test("appends v1 when baseUrl ends with a trailing slash", async () => {
+		const { configureCodex } = await import("@/configure.js");
+		configureCodex({
+			apiKey: "k",
+			baseUrl: "https://example.com/",
+			model: "m",
+		});
+
+		const config = readCodexToml();
+		expect(config.model_providers.aigateway?.base_url).toBe(
+			"https://example.com/v1",
+		);
+	});
+});
+
 describe("getBackupStatus", () => {
 	test("returns claude-settings for claude-code", async () => {
 		const { getBackupStatus } = await import("@/configure.js");
@@ -266,6 +396,12 @@ describe("getBackupStatus", () => {
 		const { getBackupStatus } = await import("@/configure.js");
 		const statuses = getBackupStatus("opencode");
 		expect(statuses.map((s) => s.kind)).toEqual(["opencode-config"]);
+	});
+
+	test("returns codex-config for codex", async () => {
+		const { getBackupStatus } = await import("@/configure.js");
+		const statuses = getBackupStatus("codex");
+		expect(statuses.map((s) => s.kind)).toEqual(["codex-config"]);
 	});
 
 	test("reports hasSource and hasBackup accurately", async () => {
@@ -336,6 +472,22 @@ describe("restoreTool", () => {
 		expect(result.backupPath).toBe(
 			join(tempDir, ".claude", "settings.json.backup"),
 		);
+	});
+
+	test("replaces the live Codex config.toml with the backup", async () => {
+		const dir = join(tempDir, ".codex");
+		const livePath = join(dir, "config.toml");
+		const backupPath = `${livePath}.backup`;
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(livePath, 'marker = "live"\n');
+		writeFileSync(backupPath, 'marker = "backup"\n');
+
+		const { restoreTool } = await import("@/configure.js");
+		const result = restoreTool("codex");
+
+		expect(result.status).toBe("restored");
+		expect(existsSync(backupPath)).toBe(false);
+		expect(readFileSync(livePath, "utf-8")).toContain('marker = "backup"');
 	});
 });
 

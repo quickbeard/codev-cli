@@ -24,20 +24,25 @@ codev install
 | `codev update`             | Update installed AI coding agents                                                         |
 | `codev claude`             | Run the `claude` CLI (forwards remaining arguments)                                       |
 | `codev claude --restore`   | Restore `~/.claude/settings.json` from `~/.claude/settings.json.backup`                   |
+| `codev codex`              | Run the `codex` CLI (forwards remaining arguments)                                        |
+| `codev codex --restore`    | Restore `~/.codex/config.toml` from `~/.codex/config.toml.backup`                         |
 | `codev opencode`           | Run the `opencode` CLI (forwards remaining arguments)                                     |
 | `codev opencode --restore` | Restore `~/.config/opencode/opencode.json` from `~/.config/opencode/opencode.json.backup` |
 | `codev logout`             | Sign out of SSO                                                                           |
 
+> Codex requires Node.js ≥ 22, and CoDev itself enforces this on every invocation.
+
 ## Restoring a previous configuration
 
-CoDev will replace `~/.claude/settings.json` and `~/.config/opencode/opencode.json` with new configs. Before writing its own config, CoDev backs up the specific file it would replace — other files in those directories are left untouched.
+CoDev will replace `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.config/opencode/opencode.json` with new configs. Before writing its own config, CoDev backs up the specific file it would replace — other files in those directories are left untouched.
 
 | Selection   | Backed up                                 |
 | ----------- | ----------------------------------------- |
 | Claude Code | `~/.claude/settings.json.backup`          |
+| Codex       | `~/.codex/config.toml.backup`             |
 | OpenCode    | `~/.config/opencode/opencode.json.backup` |
 
-`settings.json` and `opencode.json` are **replaced** (not merged), so any keys you had before live only in the file backup.
+`settings.json`, `config.toml`, and `opencode.json` are **replaced** (not merged), so any keys you had before live only in the file backup.
 
 ### Existing backups
 
@@ -49,6 +54,7 @@ Use the built-in restore shortcut:
 
 ```bash
 codev claude --restore
+codev codex --restore
 codev opencode --restore
 ```
 
@@ -60,8 +66,11 @@ Or do it manually:
 # Claude Code
 mv ~/.claude/settings.json.backup ~/.claude/settings.json
 
+# Codex
+mv ~/.codex/config.toml.backup ~/.codex/config.toml
+
 # OpenCode
 mv ~/.config/opencode/opencode.json.backup ~/.config/opencode/opencode.json
 ```
 
-If you have a session running, you might need to restart it with `claude -c` or `opencode -c` to resume your progress.
+If you have a session running, you might need to restart it with `claude -c`, `codex resume`, or `opencode -c` to resume your progress.
