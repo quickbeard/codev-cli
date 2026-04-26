@@ -16,7 +16,7 @@ describe("Login", () => {
 		});
 
 		const onDone = mock();
-		const { lastFrame } = render(<Login onDone={onDone} />);
+		const { lastFrame } = render(<Login onDone={onDone} onFallback={mock()} />);
 
 		await new Promise((r) => setTimeout(r, 50));
 
@@ -37,7 +37,7 @@ describe("Login", () => {
 		});
 
 		const onDone = mock();
-		const { lastFrame } = render(<Login onDone={onDone} />);
+		const { lastFrame } = render(<Login onDone={onDone} onFallback={mock()} />);
 
 		await new Promise((r) => setTimeout(r, 50));
 
@@ -52,7 +52,7 @@ describe("Login", () => {
 		});
 
 		const onDone = mock();
-		const { lastFrame } = render(<Login onDone={onDone} />);
+		const { lastFrame } = render(<Login onDone={onDone} onFallback={mock()} />);
 
 		await new Promise((r) => setTimeout(r, 50));
 
@@ -70,7 +70,7 @@ describe("Login", () => {
 		});
 
 		const onDone = mock();
-		const { stdin } = render(<Login onDone={onDone} />);
+		const { stdin } = render(<Login onDone={onDone} onFallback={mock()} />);
 
 		await new Promise((r) => setTimeout(r, 50));
 
@@ -88,7 +88,7 @@ describe("Login", () => {
 		});
 
 		const onDone = mock();
-		render(<Login onDone={onDone} />);
+		render(<Login onDone={onDone} onFallback={mock()} />);
 
 		await new Promise((r) => setTimeout(r, 50));
 
@@ -107,7 +107,7 @@ describe("Login", () => {
 		spyOn(proxy, "fetchApiKey").mockResolvedValue("sk-test-key-123");
 
 		const onDone = mock();
-		render(<Login onDone={onDone} />);
+		render(<Login onDone={onDone} onFallback={mock()} />);
 
 		await new Promise((r) => setTimeout(r, 100));
 
@@ -129,7 +129,7 @@ describe("Login", () => {
 		);
 
 		const onDone = mock();
-		const { lastFrame } = render(<Login onDone={onDone} />);
+		const { lastFrame } = render(<Login onDone={onDone} onFallback={mock()} />);
 
 		await new Promise((r) => setTimeout(r, 100));
 
@@ -157,7 +157,9 @@ describe("Login", () => {
 		fetchSpy.mockClear();
 
 		const onDone = mock();
-		const { stdin, lastFrame } = render(<Login onDone={onDone} />);
+		const { stdin, lastFrame } = render(
+			<Login onDone={onDone} onFallback={mock()} />,
+		);
 
 		await new Promise((r) => setTimeout(r, 100));
 		expect(lastFrame() ?? "").toContain("Login failed: transient");
@@ -169,6 +171,43 @@ describe("Login", () => {
 		expect(fetchSpy).toHaveBeenCalledTimes(2);
 		expect(loginSpy).toHaveBeenCalledTimes(2);
 		expect(onDone).toHaveBeenCalledWith("sk-retry-ok");
+	});
+
+	test("shows fallback prompt and calls onFallback on Enter when proxy returns empty key", async () => {
+		spyOn(auth, "login").mockImplementation(() =>
+			Promise.resolve({
+				access_token: "access-xyz",
+				id_token: "id-xyz",
+				expires_at: Date.now() + 3600000,
+				user: { sub: "u", email: "test@example.com", displayName: "Test" },
+			}),
+		);
+		spyOn(proxy, "fetchApiKey").mockResolvedValue("");
+
+		const onDone = mock();
+		const onFallback = mock();
+		const { stdin, lastFrame } = render(
+			<Login onDone={onDone} onFallback={onFallback} />,
+		);
+
+		await new Promise((r) => setTimeout(r, 100));
+
+		const output = lastFrame() ?? "";
+		expect(output).toContain(
+			"SSO succeeded but the gateway returned an empty API key.",
+		);
+		expect(output).toContain(
+			"Press Enter to enter credentials manually, Ctrl-C to quit",
+		);
+		expect(onDone).not.toHaveBeenCalled();
+		expect(onFallback).not.toHaveBeenCalled();
+
+		stdin.write("\r");
+		await new Promise((r) => setTimeout(r, 50));
+
+		expect(onFallback).toHaveBeenCalledTimes(1);
+		expect(onDone).not.toHaveBeenCalled();
+		expect(lastFrame() ?? "").not.toContain("Press Enter to enter credentials");
 	});
 
 	test("clears the previous error and logs when retrying", async () => {
@@ -183,7 +222,9 @@ describe("Login", () => {
 			});
 
 		const onDone = mock();
-		const { stdin, lastFrame } = render(<Login onDone={onDone} />);
+		const { stdin, lastFrame } = render(
+			<Login onDone={onDone} onFallback={mock()} />,
+		);
 
 		await new Promise((r) => setTimeout(r, 50));
 		expect(lastFrame() ?? "").toContain("first attempt log");

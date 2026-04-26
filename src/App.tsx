@@ -52,6 +52,7 @@ export function App() {
 	const [tools, setTools] = useState<Tool[]>([]);
 	const [authMethod, setAuthMethod] = useState<AuthMethodChoice | null>(null);
 	const [creds, setCreds] = useState<Credentials | null>(null);
+	const [fallenBack, setFallenBack] = useState(false);
 
 	const handleConfirm = (selected: Tool[]) => {
 		setTools(selected);
@@ -85,6 +86,11 @@ export function App() {
 	const handleLoginDone = useCallback((key: string) => {
 		setCreds({ apiKey: key });
 		setStep("configuring");
+	}, []);
+
+	const handleLoginFallback = useCallback(() => {
+		setFallenBack(true);
+		setStep("manual-creds");
 	}, []);
 
 	const handleManualDone = useCallback((value: ManualCredentialsValue) => {
@@ -149,20 +155,21 @@ export function App() {
 				)}
 				{POST_AUTH_METHOD.includes(step) && authMethod === "sso" && (
 					<Step active={step === "login"} title={loginTitle()}>
-						<Login onDone={handleLoginDone} />
+						<Login onDone={handleLoginDone} onFallback={handleLoginFallback} />
 					</Step>
 				)}
-				{POST_AUTH_METHOD.includes(step) && authMethod === "manual" && (
-					<Step
-						active={step === "manual-creds"}
-						title={manualCredentialsTitle()}
-					>
-						<ManualCredentials
-							onDone={handleManualDone}
-							readOnly={step !== "manual-creds"}
-						/>
-					</Step>
-				)}
+				{POST_AUTH_METHOD.includes(step) &&
+					(authMethod === "manual" || fallenBack) && (
+						<Step
+							active={step === "manual-creds"}
+							title={manualCredentialsTitle()}
+						>
+							<ManualCredentials
+								onDone={handleManualDone}
+								readOnly={step !== "manual-creds"}
+							/>
+						</Step>
+					)}
 				{POST_AUTH.includes(step) && creds && (
 					<Step active={step === "configuring"} title={configureTitle()}>
 						<Configure

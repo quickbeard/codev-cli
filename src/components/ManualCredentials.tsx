@@ -113,11 +113,7 @@ export function ManualCredentials({
 			)}
 			{!readOnly && !submitted && (
 				<Box marginTop={1}>
-					<Text dimColor>
-						{
-							"Press Enter to confirm each field. Backspace to edit the current field."
-						}
-					</Text>
+					<Text dimColor>{"Press Enter to confirm each field."}</Text>
 				</Box>
 			)}
 		</Box>
