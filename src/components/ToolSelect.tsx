@@ -4,6 +4,7 @@ import type { Tool } from "@/configure.js";
 
 const TOOLS: { label: string; value: Tool }[] = [
 	{ label: "Claude Code", value: "claude-code" },
+	{ label: "Codex", value: "codex" },
 	{ label: "OpenCode", value: "opencode" },
 ];
 

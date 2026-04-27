@@ -7,6 +7,18 @@ import { runRestore } from "@/restore.js";
 import { runAgent } from "@/run.js";
 import { UpdateApp } from "@/UpdateApp.js";
 
+const MIN_NODE_MAJOR = 22;
+const nodeMajor = Number.parseInt(
+	process.versions.node.split(".")[0] ?? "0",
+	10,
+);
+if (Number.isNaN(nodeMajor) || nodeMajor < MIN_NODE_MAJOR) {
+	console.error(
+		`CoDev requires Node.js >= ${MIN_NODE_MAJOR}. Current version: ${process.versions.node}.`,
+	);
+	process.exit(1);
+}
+
 const [command, ...args] = process.argv.slice(2);
 
 switch (command) {
@@ -50,6 +62,12 @@ switch (command) {
 			process.exit(runRestore("claude-code"));
 		}
 		process.exit(await runAgent("claude", args));
+		break;
+	case "codex":
+		if (args[0] === "--restore") {
+			process.exit(runRestore("codex"));
+		}
+		process.exit(await runAgent("codex", args));
 		break;
 	case "opencode":
 		if (args[0] === "--restore") {

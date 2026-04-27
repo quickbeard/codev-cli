@@ -19,6 +19,8 @@ Commands:
   update              Update installed AI coding agents
   claude              Run the Claude Code CLI (${link("https://code.claude.com/docs/en/cli-reference")})
   claude --restore    Restore ~/.claude/settings.json from ~/.claude/settings.json.backup
+  codex               Run the Codex CLI (${link("https://developers.openai.com/codex/cli")})
+  codex --restore     Restore ~/.codex/config.toml from ~/.codex/config.toml.backup
   opencode            Run the OpenCode CLI (${link("https://opencode.ai/docs/cli")})
   opencode --restore  Restore ~/.config/opencode/opencode.json from ~/.config/opencode/opencode.json.backup
   logout              Sign out of SSO

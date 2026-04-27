@@ -9,11 +9,13 @@ interface ConfirmProps {
 
 const TOOL_LABEL: Record<Tool, string> = {
 	"claude-code": "Claude Code",
+	codex: "Codex",
 	opencode: "OpenCode",
 };
 
 const RESTORE_CMD: Record<Tool, string> = {
 	"claude-code": "codev claude --restore",
+	codex: "codev codex --restore",
 	opencode: "codev opencode --restore",
 };
 

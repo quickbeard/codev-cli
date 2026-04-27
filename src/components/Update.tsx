@@ -5,7 +5,7 @@ import { TaskList } from "@/components/TaskList.js";
 import type { Tool } from "@/configure.js";
 import { detectInstalledViaNpm, installAndVerify, PKG } from "@/npm.js";
 
-const ALL_TOOLS: Tool[] = ["claude-code", "opencode"];
+const ALL_TOOLS: Tool[] = ["claude-code", "codex", "opencode"];
 
 type Phase =
 	| { kind: "detecting" }
