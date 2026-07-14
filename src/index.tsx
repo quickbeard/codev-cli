@@ -21,6 +21,7 @@ import { initLogging, logWarn } from "@/lib/log.js";
 import { runLogs } from "@/lib/logs.js";
 import { runSkillOffice } from "@/lib/office.js";
 import { applyEnvProxy } from "@/lib/proxy.js";
+import { runReadiness } from "@/lib/readiness.js";
 import { ensureNodeSqliteOrReexec } from "@/lib/reexec.js";
 import { ensureFreshGatewayKey } from "@/lib/refresh.js";
 import {
@@ -557,6 +558,14 @@ switch (command) {
 	// (cliLogsDir) and the conversation exports (agentLogsDir).
 	case "clear-logs": {
 		process.exit(runClearLogs());
+		break;
+	}
+	case "readiness": {
+		if (args.length > 0) {
+			console.error("Usage: codev readiness");
+			process.exit(1);
+		}
+		process.exit(await runReadiness());
 		break;
 	}
 	// Every command not claimed by the hub above belongs to CoDev Code:
