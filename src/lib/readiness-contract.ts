@@ -5,7 +5,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 // only when READINESS_RUBRIC or the result contract changes, and update the
 // proxy/web supported-version constants in the same change. An environment
 // override could falsely label one rubric as another and corrupt comparisons.
-export const READINESS_RUBRIC_VERSION = "2026-07-14.v1";
+export const READINESS_RUBRIC_VERSION = "2026-07-15.v2";
 
 export type ReadinessStatus = "pass" | "fail" | "skipped";
 
@@ -182,15 +182,183 @@ function label(id: string): string {
 	return id.replaceAll("_", " ");
 }
 
+const CRITERION_PASS_CONDITIONS: Record<string, string> = {
+	lint_config:
+		"Pass only when the repository configures a language-appropriate linter and exposes a usable lint command.",
+	type_check:
+		"Pass only when typed code has a configured, runnable static type-check command; pass untyped-language repositories only when an equivalent static analyzer is configured.",
+	formatter:
+		"Pass only when an automatic formatter and its repository configuration or command are present.",
+	pre_commit_hooks:
+		"Pass only when version-controlled pre-commit hooks run meaningful validation before commits.",
+	strict_typing:
+		"Pass only when the primary typed languages enable strict type checking or comparably strong settings.",
+	naming_consistency:
+		"Pass only when representative source files and enforced conventions show consistent language-idiomatic naming.",
+	cyclomatic_complexity:
+		"Pass only when tooling measures or limits code complexity in normal development or CI.",
+	large_file_detection:
+		"Pass only when automation detects or blocks oversized source files or generated/binary additions.",
+	dead_code_detection:
+		"Pass only when configured tooling detects unused or unreachable code.",
+	duplicate_code_detection:
+		"Pass only when configured clone-detection tooling detects repeated code blocks; duplicate object-key lint rules do not count.",
+	code_modularization:
+		"Pass only when representative source structure has cohesive modules with clear boundaries and avoids dominant god modules.",
+	tech_debt_tracking:
+		"Pass only when the repository has an actionable, maintained mechanism for tracking technical debt.",
+	n_plus_one_detection:
+		"Pass only when database access has automated N+1 query detection, query-count assertions, or equivalent safeguards.",
+	build_cmd_doc:
+		"Pass only when a new contributor can find an explicit build command in version-controlled documentation.",
+	deps_pinned:
+		"Pass only when dependency manifests and lockfiles provide reproducible direct and transitive dependency resolution.",
+	vcs_cli_tools:
+		"Pass only when documentation names actual version-control or hosting CLI commands for contributor tasks; CI configuration or generic Git usage alone does not pass.",
+	automated_pr_review:
+		"Pass only when pull or merge requests receive automatic code-quality review beyond basic compilation.",
+	agentic_development:
+		"Pass only when repository instructions, tools, or workflows explicitly support coding agents with safe, actionable context.",
+	fast_ci_feedback:
+		"Pass only when the complete CI workflow set gives early feedback through independently running focused jobs, parallel jobs, or explicit stages; inspect all workflow files before deciding.",
+	build_performance_tracking:
+		"Pass only when build duration or regressions are measured over time.",
+	deployment_frequency:
+		"Pass only when repository automation records or exposes deployment frequency rather than merely supporting deployment.",
+	single_command_setup:
+		"Pass only when a documented single command or task bootstraps the local development environment.",
+	feature_flag_infrastructure:
+		"Pass only when application code uses a centralized, testable feature-flag mechanism.",
+	release_notes_automation:
+		"Pass only when release notes or changelogs are generated or validated automatically from version-controlled inputs.",
+	progressive_rollout:
+		"Pass only when deployment configuration supports staged, canary, percentage, or cohort-based rollout.",
+	rollback_automation:
+		"Pass only when a documented automated rollback path exists and identifies the artifact or revision restored.",
+	monorepo_tooling:
+		"Pass only when a multi-package repository uses workspace-aware orchestration; pass a single-package repository when no monorepo coordination is needed.",
+	heavy_dependency_detection:
+		"Pass only when dependency size, startup cost, or bundle impact is measured or constrained.",
+	unused_dependencies_detection:
+		"Pass only when tooling detects unused declared package dependencies; unused imports, variables, or declarations alone do not pass.",
+	version_drift_detection:
+		"Pass only when automation detects inconsistent tool or dependency versions across repository components.",
+	release_automation:
+		"Pass only when versioning, artifact creation, and publishing are automated through version-controlled workflows.",
+	dead_feature_flag_detection:
+		"Pass only when stale feature flags are inventoried, expired, or automatically detected.",
+	unit_tests_exist:
+		"Pass only when meaningful unit tests are present for production logic, not merely placeholder tests.",
+	integration_tests_exist:
+		"Pass only when tests exercise multiple real internal components together or a real service/database boundary; external third parties may be mocked, but a single isolated unit with all collaborators mocked does not count.",
+	unit_tests_runnable:
+		"Pass only when a documented or manifest-defined unit-test command can run without undocumented manual preparation.",
+	test_performance_tracking:
+		"Pass only when test duration or slow-test regressions are measured or reported.",
+	flaky_test_detection:
+		"Pass only when CI detects, retries with reporting, quarantines, or tracks flaky tests.",
+	test_coverage_thresholds:
+		"Pass only when coverage thresholds are configured and enforced rather than coverage being generated without a gate.",
+	test_naming_conventions:
+		"Pass only when test locations and names follow a consistent discoverable convention across primary languages.",
+	test_isolation:
+		"Pass only when test configuration or fixtures prevent shared mutable state and order dependence.",
+	agents_md:
+		"Pass only when AGENTS.md or CLAUDE.md provides repository-specific instructions for coding agents.",
+	readme:
+		"Pass only when a repository-root README explains purpose and a usable development entry point.",
+	automated_doc_generation:
+		"Pass only when reference documentation is generated or checked automatically from source-controlled definitions.",
+	skills:
+		"Pass only when reusable repository-local coding-agent skills are version controlled in a recognized skills directory.",
+	documentation_freshness:
+		"Pass only when automation or an explicit maintained process detects stale documentation.",
+	api_schema_docs:
+		"Pass only when public APIs have a maintained machine-readable schema or generated reference tied to implementation.",
+	service_flow_documented:
+		"Pass only when important service or request flows are documented with current component interactions.",
+	agents_md_validation:
+		"Pass only when a script, test, hook, or CI workflow validates coding-agent instruction files; merely having AGENTS.md or CLAUDE.md does not pass.",
+	devcontainer:
+		"Pass only when a version-controlled dev-container definition exists.",
+	env_template:
+		"Pass only when repositories that require runtime environment variables provide a safe non-secret template using a recognized naming convention.",
+	local_services_setup:
+		"Pass only when required local services have a reproducible documented startup mechanism.",
+	database_schema:
+		"Pass only when database structure is version controlled through schemas or ordered migrations.",
+	devcontainer_runnable:
+		"Pass only when the dev-container is validated by CI or has evidence that its build and initialization commands are maintained.",
+	structured_logging:
+		"Pass only when application logging emits structured fields through a centralized logger in representative runtime paths.",
+	distributed_tracing:
+		"Pass only when cross-service requests carry trace context and emit spans through configured instrumentation; correlated log trace IDs without spans are insufficient.",
+	metrics_collection:
+		"Pass only when application or service metrics are emitted and exposed to a collection backend.",
+	code_quality_metrics:
+		"Pass only when code-quality metrics are measured and reported or gated over time.",
+	error_tracking_contextualized:
+		"Pass only when an error-tracking or aggregation system receives errors with release, environment, request, or user-safe diagnostic context; local structured logs alone are insufficient.",
+	alerting_configured:
+		"Pass only when actionable alert rules or monitors are version controlled.",
+	runbooks_documented:
+		"Pass only when operational incidents have discoverable, actionable runbooks.",
+	deployment_observability:
+		"Pass only when deployments can be correlated with runtime health, logs, errors, or metrics.",
+	health_checks:
+		"Pass only when deployable services expose meaningful liveness/readiness checks and deployment configuration uses them.",
+	circuit_breakers:
+		"Pass only when failure-prone remote calls use explicit timeout, retry, and circuit-breaking policies.",
+	profiling_instrumentation:
+		"Pass only when production-safe profiling or performance instrumentation can be enabled and interpreted.",
+	branch_protection:
+		"Pass only when local policy-as-code or repository documentation establishes protected review and status-check requirements.",
+	secret_scanning:
+		"Pass only when committed and incoming changes are automatically scanned for secrets.",
+	codeowners: "Pass only when a recognized CODEOWNERS file exists.",
+	automated_security_review:
+		"Pass only when dependency, static application, or infrastructure security analysis runs automatically.",
+	dependency_update_automation:
+		"Pass only when a bot or workflow proposes and validates dependency updates.",
+	gitignore_comprehensive:
+		"Pass only when ignore rules cover generated output, local state, credentials, and ecosystem-specific artifacts without hiding source.",
+	dast_scanning:
+		"Pass only when a runnable web/API target is tested by automated dynamic security scanning.",
+	pii_handling:
+		"Pass only when sensitive personal data has explicit classification, minimization, access, and storage controls in code or policy.",
+	privacy_compliance:
+		"Pass only when applicable privacy obligations have version-controlled implementation or operational guidance.",
+	secrets_management:
+		"Pass only when runtime secrets come from a managed injection mechanism and are not stored in source-controlled configuration; local .env files alone are not managed secret injection.",
+	log_scrubbing:
+		"Pass only when every representative logging path redacts or prevents secrets and personal data; a documented cleartext-secret exception is a failure.",
+	min_release_age:
+		"Pass only when dependency intake policy or automation delays or reviews newly published releases.",
+	issue_templates:
+		"Pass only when GitHub or GitLab issue templates collect actionable reproduction and context.",
+	issue_labeling_system:
+		"Pass only when labels are documented or automated enough to support consistent triage.",
+	backlog_health:
+		"Pass only when version-controlled automation or documented practice keeps stale, duplicate, and unprioritized work visible.",
+	pr_templates:
+		"Pass only when GitHub pull-request or GitLab merge-request templates provide an actionable review checklist.",
+	product_analytics_instrumentation:
+		"Pass only when product behavior is measured through intentional, documented events with ownership or schema.",
+	error_to_insight_pipeline:
+		"Pass only when production errors feed a repeatable triage, prioritization, or issue-creation workflow.",
+};
+
 export const READINESS_RUBRIC: ReadinessCriterionDefinition[] =
 	CATEGORIES.flatMap(([category, maturityLevel, ids]) =>
 		ids.map((id) => ({
 			id,
 			category,
 			maturityLevel,
-			description: `Evaluate whether the repository has effective ${label(id)} support.`,
+			description:
+				CRITERION_PASS_CONDITIONS[id] ??
+				`Pass only when the repository has effective ${label(id)} support.`,
 			applicability:
-				"Evaluate each independently deployable application when applicable; otherwise evaluate once at repository level. Skip only when local repository evidence cannot establish the criterion or the criterion genuinely does not apply.",
+				"CoDev has already determined that this criterion applies. Evaluate it once at repository level and do not skip it.",
 			evidenceRequired:
 				"Cite repository-relative files and, where useful, line numbers or the safe local command whose output supports the judgment.",
 		})),
@@ -372,7 +540,9 @@ export function validateReadinessOutput(
 	return errors;
 }
 
-export function readinessJsonSchema(): Record<string, unknown> {
+export function readinessJsonSchema(
+	criterionIds: string[] = READINESS_CRITERION_IDS,
+): Record<string, unknown> {
 	const criterionSchema = {
 		type: "object",
 		additionalProperties: false,
@@ -420,9 +590,9 @@ export function readinessJsonSchema(): Record<string, unknown> {
 			criteria: {
 				type: "object",
 				additionalProperties: false,
-				required: READINESS_CRITERION_IDS,
+				required: criterionIds,
 				properties: Object.fromEntries(
-					READINESS_CRITERION_IDS.map((id) => [id, criterionSchema]),
+					criterionIds.map((id) => [id, criterionSchema]),
 				),
 			},
 			warnings: { type: "array", items: { type: "string" } },

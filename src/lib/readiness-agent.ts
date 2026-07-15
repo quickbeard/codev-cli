@@ -18,6 +18,11 @@ import {
 	READINESS_RUBRIC_VERSION,
 	readinessJsonSchema,
 } from "@/lib/readiness-contract.js";
+import {
+	type ReadinessEvaluationPlan,
+	readinessPlanPrompt,
+	semanticCriterionIds,
+} from "@/lib/readiness-plan.js";
 import { stripShimDirFromPath } from "@/lib/shims.js";
 
 export const READINESS_AGENTS = ["claude", "codex", "opencode"] as const;
@@ -125,26 +130,32 @@ export function claudeReadinessEnvOverrides(): NodeJS.ProcessEnv {
 	};
 }
 
-export function buildReadinessPrompt(): string {
+export function buildReadinessPrompt(plan?: ReadinessEvaluationPlan): string {
+	const semanticIds = plan ? new Set(semanticCriterionIds(plan)) : undefined;
+	const rubric = semanticIds
+		? READINESS_RUBRIC.filter(({ id }) => semanticIds.has(id))
+		: READINESS_RUBRIC;
 	return `You are evaluating how ready a software repository is for autonomous coding agents.
 
 Work read-only. Do not edit, create, delete, format, commit, install dependencies, access the network, or spawn subagents. You may inspect repository files and git history and run safe, non-mutating diagnostic commands. Judge semantic evidence across languages and frameworks; do not rely only on filenames.
 
-Finish efficiently. First inventory the repository with one batched file-listing command. Prefer manifests, CI configuration, test configuration, documentation, security policy, deployment files, and a small representative source sample. Batch related reads/searches and reuse the same evidence across criteria. Do not inspect every source file or run expensive builds/tests. Aim for no more than 12 repository commands before producing the report.
+Finish efficiently. CoDev has already performed a fresh deterministic inventory for this run. Start from the supplied profile and relevant-file list instead of rediscovering the repository. Inspect only the files needed to judge the semantic criteria, batch related reads/searches, and reuse evidence. Do not inspect every source file or run expensive builds/tests. Aim for no more than 6 repository commands before producing the report.
 
-Discover independently deployable applications first. Evaluate every rubric criterion. Use "skipped" only when it is genuinely inapplicable or cannot be established from local evidence. A failure means the criterion applies but adequate support is absent. For application-scoped criteria, numerator and denominator count evaluated applications. Repository-scoped criteria use denominator 1. Evidence entries must be existing repository-relative file or directory paths; file paths may optionally be followed by a line number. Use an empty evidence array when the rationale describes something that is absent. Never cite a nonexistent placeholder, URL, or command as evidence; describe command evidence in the rationale instead.
+Evaluate every semantic rubric criterion below. Semantic criteria must be pass or fail, never skipped: failure means the repository does not provide enough evidence. Score each criterion once for the repository with denominator 1 and numerator 1 for pass or 0 for fail. Return only semantic criterion IDs in the criteria object; omit fixed decisions because CoDev merges them authoritatively. Evidence entries must be existing repository-relative file or directory paths; file paths may optionally be followed by a line number. Use an empty evidence array when the rationale describes something that is absent. Never cite a nonexistent placeholder, URL, or command as evidence; describe command evidence in the rationale instead.
 
 Return only the JSON object matching the supplied schema. Do not include aggregate scores.
 
 Rubric version: ${READINESS_RUBRIC_VERSION}
-Rubric:
-${JSON.stringify(READINESS_RUBRIC, null, 2)}`;
+Fresh deterministic plan:
+${plan ? readinessPlanPrompt(plan) : "No deterministic plan supplied."}
+Semantic rubric:
+${JSON.stringify(rubric, null, 2)}`;
 }
 
 export function openCodeStructuredOutputInstruction(): string {
 	return `Return exactly one JSON object with this shape and no markdown fence:
-{"rubricVersion":"${READINESS_RUBRIC_VERSION}","languages":["string"],"applications":[{"path":".","description":"string","languages":["string"]}],"criteria":{"<every rubric id>":{"status":"pass|fail|skipped","numerator":"integer or null","denominator":"positive integer","rationale":"string","evidence":["existing repository-relative path"]}},"warnings":["string"],"recommendations":["2 or 3 strings"],"model":"string or null"}
-Use null numerator only for skipped criteria. Include every rubric id exactly once and no additional criterion ids.`;
+{"rubricVersion":"${READINESS_RUBRIC_VERSION}","languages":["string"],"applications":[{"path":".","description":"string","languages":["string"]}],"criteria":{"<every semantic rubric id>":{"status":"pass|fail|skipped","numerator":"integer or null","denominator":"positive integer","rationale":"string","evidence":["existing repository-relative path"]}},"warnings":["string"],"recommendations":["2 or 3 strings"],"model":"string or null"}
+	Use null numerator only for skipped criteria. Include every criterion listed in the Semantic rubric exactly once and omit fixed-decision criteria.`;
 }
 
 export function buildAgentCommand(
@@ -167,7 +178,7 @@ export function buildAgentCommand(
 			"--permission-mode",
 			"plan",
 			"--max-turns",
-			"80",
+			"20",
 			"--allowedTools",
 			"Read",
 			"Glob",
@@ -381,11 +392,17 @@ export async function runReadinessAgent(
 	repair?: { raw: string; errors: string[]; sessionId?: string },
 	modelOverride?: string,
 	onProgress: AgentProgress = () => {},
+	plan?: ReadinessEvaluationPlan,
 ): Promise<AgentRunResult> {
 	const temp = mkdtempSync(join(tmpdir(), "codev-readiness-"));
 	const schemaPath = join(temp, "schema.json");
 	const outputPath = join(temp, "output.json");
-	writeFileSync(schemaPath, JSON.stringify(readinessJsonSchema()));
+	writeFileSync(
+		schemaPath,
+		JSON.stringify(
+			readinessJsonSchema(plan ? semanticCriterionIds(plan) : undefined),
+		),
+	);
 	let envOverrides: NodeJS.ProcessEnv = {};
 	if (agent === "claude") envOverrides = claudeReadinessEnvOverrides();
 	if (agent === "opencode") {
@@ -426,7 +443,7 @@ export async function runReadinessAgent(
 	}
 	const prompt = repair
 		? `Your previous readiness output was invalid. Correct it and return the complete JSON object only. Do not rescan or change the repository. Remove nonexistent evidence entries and use an empty evidence array when the rationale describes absence. Existing repository-relative directories are valid evidence. Validation errors:\n${repair.errors.map((error) => `- ${error}`).join("\n")}\nPrevious output:\n${repair.raw.slice(-200_000)}`
-		: buildReadinessPrompt();
+		: buildReadinessPrompt(plan);
 	const started = Date.now();
 	const deadline = started + readinessRuntimeConfig(modelOverride).timeoutMs;
 	try {

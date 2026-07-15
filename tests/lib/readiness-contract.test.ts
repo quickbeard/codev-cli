@@ -127,6 +127,11 @@ describe("readiness contract", () => {
 		expect(properties.rubricVersion?.type).toBe("string");
 		expect(buildReadinessPrompt()).toContain(READINESS_RUBRIC_VERSION);
 		expect(buildReadinessPrompt()).toContain("Do not edit");
+		const subsetSchema = readinessJsonSchema(["lint_config"]);
+		const subsetCriteria = (
+			subsetSchema.properties as Record<string, Record<string, unknown>>
+		).criteria as Record<string, unknown>;
+		expect(subsetCriteria.required).toEqual(["lint_config"]);
 	});
 
 	it("builds read-only headless commands for every supported provider", () => {
@@ -180,7 +185,9 @@ describe("readiness contract", () => {
 		const instruction = openCodeStructuredOutputInstruction();
 		expect(instruction).toContain('"rubricVersion"');
 		expect(instruction).toContain('"status":"pass|fail|skipped"');
-		expect(instruction).toContain("every rubric id exactly once");
+		expect(instruction).toContain(
+			"every criterion listed in the Semantic rubric",
+		);
 	});
 
 	it("removes CoDev shims from readiness subprocess PATH resolution", () => {

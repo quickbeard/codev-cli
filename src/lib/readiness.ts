@@ -14,6 +14,10 @@ import {
 	summarizeReadiness,
 	validateReadinessOutput,
 } from "@/lib/readiness-contract.js";
+import {
+	buildReadinessEvaluationPlan,
+	finalizeReadinessOutput,
+} from "@/lib/readiness-plan.js";
 import { ensureFreshGatewayKey } from "@/lib/refresh.js";
 
 function git(args: string[], cwd: string): string {
@@ -80,7 +84,9 @@ export async function runReadiness(
 	}
 
 	const before = repositoryState(root);
-	onProgress(`Scanning repository with ${agent}, this will take a while`);
+	onProgress("Building a fresh deterministic repository profile");
+	const plan = buildReadinessEvaluationPlan(root);
+	onProgress(`Evaluating semantic readiness criteria with ${agent}`);
 	let run: AgentRunResult;
 	try {
 		const gatewayTool = gatewayToolForReadiness(agent);
@@ -91,8 +97,15 @@ export async function runReadiness(
 			undefined,
 			options.model,
 			onProgress,
+			plan,
 		);
-		run = { ...run, output: normalizeReadinessEvidence(run.output, root) };
+		run = {
+			...run,
+			output: normalizeReadinessEvidence(
+				finalizeReadinessOutput(run.output, plan),
+				root,
+			),
+		};
 		let totalDurationMs = run.durationMs;
 		let errors = validateReadinessOutput(run.output, root);
 		const { maxRepairs } = readinessRuntimeConfig();
@@ -114,8 +127,15 @@ export async function runReadiness(
 				},
 				options.model,
 				onProgress,
+				plan,
 			);
-			run = { ...run, output: normalizeReadinessEvidence(run.output, root) };
+			run = {
+				...run,
+				output: normalizeReadinessEvidence(
+					finalizeReadinessOutput(run.output, plan),
+					root,
+				),
+			};
 			totalDurationMs += run.durationMs;
 			errors = validateReadinessOutput(run.output, root);
 		}
