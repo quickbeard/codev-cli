@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import * as configure from "@/lib/configure.js";
 import { gatewayToolForReadiness } from "@/lib/readiness.js";
@@ -24,6 +24,25 @@ import {
 	summarizeReadiness,
 	validateReadinessOutput,
 } from "@/lib/readiness-contract.js";
+
+// assertReadinessPrerequisites() treats Codex as usable when a real `codex`
+// binary is on PATH, probed via spawnSync("codex", ["--version"]). CI runners
+// don't install codex, so mock the probe to keep that check deterministic:
+// `codex` reports available (status 0); anything else reports unavailable.
+vi.mock("node:child_process", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("node:child_process")>();
+	return {
+		...actual,
+		spawnSync: vi.fn((command: string) => ({
+			status: command === "codex" ? 0 : 1,
+			signal: null,
+			output: [],
+			pid: 0,
+			stdout: Buffer.from(""),
+			stderr: Buffer.from(""),
+		})),
+	};
+});
 
 function validOutput(): AgentReadinessOutput {
 	return {
@@ -199,11 +218,11 @@ describe("readiness contract", () => {
 					join(homedir(), ".codev", "bin"),
 					"/opt/homebrew/bin",
 					"/usr/bin",
-				].join(":"),
+				].join(delimiter),
 			},
 		);
 
-		expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin");
+		expect(env.PATH).toBe(["/opt/homebrew/bin", "/usr/bin"].join(delimiter));
 	});
 
 	it("isolates Claude readiness from ambient provider credentials", () => {
