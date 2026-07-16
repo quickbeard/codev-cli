@@ -4,13 +4,20 @@ import { basename, dirname, extname } from "node:path";
 import {
 	type AgentReadinessOutput,
 	READINESS_CRITERION_IDS,
-	READINESS_RUBRIC_VERSION,
 	type ReadinessApplication,
 	type ReadinessCriterionResult,
 } from "@/lib/readiness-contract.js";
+import {
+	bundledStandardProfile,
+	enabledProfileCriteria,
+	isStandardProfile,
+	type ReadinessCriterionConfig,
+	type ReadinessProfile,
+} from "@/lib/readiness-profile.js";
+import { evaluateConfiguredCriterion } from "@/lib/readiness-rules.js";
 
 export type ReadinessDecision =
-	| { mode: "semantic"; reason: string }
+	| { mode: "semantic"; reason: string; evidence?: string[] }
 	| { mode: "not_applicable"; result: ReadinessCriterionResult }
 	| { mode: "deterministic"; result: ReadinessCriterionResult };
 
@@ -29,6 +36,9 @@ export interface ReadinessRepositoryProfile {
 export interface ReadinessEvaluationPlan {
 	profile: ReadinessRepositoryProfile;
 	criteria: Record<string, ReadinessDecision>;
+	criteriaOrder: string[];
+	definitions: ReadinessCriterionConfig[];
+	analyzerVersion: string;
 }
 
 const IGNORED_COMPONENT_SEGMENTS = new Set([
@@ -201,6 +211,7 @@ function applications(
 
 export function buildReadinessEvaluationPlan(
 	root: string,
+	selectedProfile: ReadinessProfile = bundledStandardProfile(),
 ): ReadinessEvaluationPlan {
 	const trackedFiles = listedFiles(root, ["--cached"]);
 	const files = listedFiles(root, [
@@ -623,24 +634,63 @@ export function buildReadinessEvaluationPlan(
 		}
 	}
 
+	const repositoryProfile = {
+		files,
+		trackedFiles,
+		relevantFiles,
+		languages,
+		applications: applications(files, languages),
+		hasEnvironmentUsage,
+		hasDatabaseSurface,
+		hasApiSurface,
+		hasLocalServiceRequirement,
+	};
+	const definitions = enabledProfileCriteria(selectedProfile);
+	if (definitions.length === 0)
+		throw new Error("The selected readiness profile has no enabled criteria.");
+	const selectedCriteria: Record<string, ReadinessDecision> = {};
+	if (isStandardProfile(selectedProfile)) {
+		for (const definition of definitions) {
+			const decision = criteria[definition.key];
+			if (!decision)
+				throw new Error(
+					`Standard profile references unsupported criterion: ${definition.key}.`,
+				);
+			selectedCriteria[definition.key] = decision;
+		}
+	} else {
+		for (const definition of definitions)
+			selectedCriteria[definition.key] = evaluateConfiguredCriterion(
+				definition,
+				{
+					root,
+					files,
+					trackedFiles,
+				},
+			);
+	}
+	const discoveredEvidence = Object.values(selectedCriteria).flatMap(
+		(decision) =>
+			decision.mode === "semantic"
+				? (decision.evidence ?? [])
+				: decision.result.evidence,
+	);
 	return {
 		profile: {
-			files,
-			trackedFiles,
-			relevantFiles,
-			languages,
-			applications: applications(files, languages),
-			hasEnvironmentUsage,
-			hasDatabaseSurface,
-			hasApiSurface,
-			hasLocalServiceRequirement,
+			...repositoryProfile,
+			relevantFiles: [
+				...new Set([...repositoryProfile.relevantFiles, ...discoveredEvidence]),
+			].slice(0, 800),
 		},
-		criteria,
+		criteria: selectedCriteria,
+		criteriaOrder: definitions.map((criterion) => criterion.key),
+		definitions,
+		analyzerVersion: selectedProfile.activeVersion.analyzerVersion,
 	};
 }
 
 export function semanticCriterionIds(plan: ReadinessEvaluationPlan): string[] {
-	return READINESS_CRITERION_IDS.filter(
+	return plan.criteriaOrder.filter(
 		(id) => plan.criteria[id]?.mode === "semantic",
 	);
 }
@@ -651,7 +701,7 @@ export function finalizeReadinessOutput(
 ): AgentReadinessOutput {
 	const warnings = [...(Array.isArray(output.warnings) ? output.warnings : [])];
 	const criteria = Object.fromEntries(
-		READINESS_CRITERION_IDS.map((id) => {
+		plan.criteriaOrder.map((id) => {
 			const decision = plan.criteria[id];
 			if (decision?.mode !== "semantic") return [id, decision?.result];
 			const agentResult = output.criteria?.[id];
@@ -681,7 +731,7 @@ export function finalizeReadinessOutput(
 	) as Record<string, ReadinessCriterionResult>;
 	return {
 		...output,
-		rubricVersion: READINESS_RUBRIC_VERSION,
+		rubricVersion: plan.analyzerVersion,
 		languages: plan.profile.languages,
 		applications: plan.profile.applications,
 		criteria,
@@ -701,9 +751,9 @@ export function finalizeReadinessOutput(
 export function readinessPlanPrompt(plan: ReadinessEvaluationPlan): string {
 	const semantic = semanticCriterionIds(plan);
 	const fixed = Object.fromEntries(
-		READINESS_CRITERION_IDS.filter(
-			(id) => plan.criteria[id]?.mode !== "semantic",
-		).map((id) => [id, plan.criteria[id]]),
+		plan.criteriaOrder
+			.filter((id) => plan.criteria[id]?.mode !== "semantic")
+			.map((id) => [id, plan.criteria[id]]),
 	);
 	return JSON.stringify({
 		profile: {

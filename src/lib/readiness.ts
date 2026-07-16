@@ -10,14 +10,18 @@ import {
 import { readinessRuntimeConfig } from "@/lib/readiness-config.js";
 import {
 	normalizeReadinessEvidence,
-	READINESS_RUBRIC_VERSION,
 	summarizeReadiness,
 	validateReadinessOutput,
 } from "@/lib/readiness-contract.js";
 import {
 	buildReadinessEvaluationPlan,
 	finalizeReadinessOutput,
+	semanticCriterionIds,
 } from "@/lib/readiness-plan.js";
+import {
+	bundledStandardProfile,
+	type ReadinessProfile,
+} from "@/lib/readiness-profile.js";
 import { ensureFreshGatewayKey } from "@/lib/refresh.js";
 
 function git(args: string[], cwd: string): string {
@@ -51,6 +55,9 @@ export interface ReadinessRunResult {
 export type ReadinessProgress = (message: string) => void;
 export interface ReadinessOptions {
 	model?: string;
+	profile?: ReadinessProfile;
+	auth?: AuthData;
+	profileFetchMs?: number;
 }
 
 export function gatewayToolForReadiness(
@@ -67,6 +74,8 @@ export async function runReadiness(
 	options: ReadinessOptions = {},
 ): Promise<ReadinessRunResult> {
 	const root = process.cwd();
+	const totalStarted = Date.now();
+	const selectedProfile = options.profile ?? bundledStandardProfile();
 	if (!git(["rev-parse", "--is-inside-work-tree"], root)) {
 		return {
 			exitCode: 1,
@@ -85,20 +94,48 @@ export async function runReadiness(
 
 	const before = repositoryState(root);
 	onProgress("Building a fresh deterministic repository profile");
-	const plan = buildReadinessEvaluationPlan(root);
+	const deterministicStarted = Date.now();
+	let plan: ReturnType<typeof buildReadinessEvaluationPlan>;
+	try {
+		plan = buildReadinessEvaluationPlan(root, selectedProfile);
+	} catch (error) {
+		return {
+			exitCode: 1,
+			message: error instanceof Error ? error.message : String(error),
+		};
+	}
+	const deterministicMs = Date.now() - deterministicStarted;
 	onProgress(`Evaluating semantic readiness criteria with ${agent}`);
 	let run: AgentRunResult;
+	const semanticStarted = Date.now();
 	try {
-		const gatewayTool = gatewayToolForReadiness(agent);
-		if (gatewayTool) await ensureFreshGatewayKey(gatewayTool);
-		run = await runReadinessAgent(
-			agent,
-			root,
-			undefined,
-			options.model,
-			onProgress,
-			plan,
-		);
+		if (semanticCriterionIds(plan).length === 0) {
+			run = {
+				provider: agent,
+				durationMs: 0,
+				raw: "",
+				output: {
+					rubricVersion: plan.analyzerVersion,
+					languages: plan.profile.languages,
+					applications: plan.profile.applications,
+					criteria: {},
+					warnings: [],
+					recommendations: [],
+					model: null,
+				},
+			};
+		} else {
+			const gatewayTool = gatewayToolForReadiness(agent);
+			if (gatewayTool) await ensureFreshGatewayKey(gatewayTool);
+			run = await runReadinessAgent(
+				agent,
+				root,
+				undefined,
+				options.model,
+				onProgress,
+				plan,
+			);
+		}
 		run = {
 			...run,
 			output: normalizeReadinessEvidence(
@@ -107,7 +144,12 @@ export async function runReadiness(
 			),
 		};
 		let totalDurationMs = run.durationMs;
-		let errors = validateReadinessOutput(run.output, root);
+		let errors = validateReadinessOutput(
+			run.output,
+			root,
+			plan.criteriaOrder,
+			plan.analyzerVersion,
+		);
 		const { maxRepairs } = readinessRuntimeConfig();
 		for (
 			let attempt = 1;
@@ -137,7 +179,12 @@ export async function runReadiness(
 				),
 			};
 			totalDurationMs += run.durationMs;
-			errors = validateReadinessOutput(run.output, root);
+			errors = validateReadinessOutput(
+				run.output,
+				root,
+				plan.criteriaOrder,
+				plan.analyzerVersion,
+			);
 		}
 		if (errors.length > 0)
 			throw new Error(
@@ -150,6 +197,7 @@ export async function runReadiness(
 			message: error instanceof Error ? error.message : String(error),
 		};
 	}
+	const semanticMs = Date.now() - semanticStarted;
 
 	const after = repositoryState(root);
 	if (after !== before) {
@@ -186,7 +234,13 @@ export async function runReadiness(
 		repoName: repoName(url),
 		branch: git(["branch", "--show-current"], root),
 		commitHash: git(["rev-parse", "HEAD"], root),
-		rubricVersion: READINESS_RUBRIC_VERSION,
+		rubricVersion: plan.analyzerVersion,
+		readinessProfileId: selectedProfile.id,
+		readinessProfileVersionId: selectedProfile.activeVersion.id,
+		profileRevision: selectedProfile.activeVersion.revision,
+		profileContentHash: selectedProfile.activeVersion.contentHash,
+		analyzerVersion: selectedProfile.activeVersion.analyzerVersion,
+		profileSnapshot: selectedProfile,
 		languages: run.output.languages,
 		apps: Object.fromEntries(
 			run.output.applications.map((app) => [
@@ -202,6 +256,12 @@ export async function runReadiness(
 			model: run.output.model ?? configuredModel ?? null,
 			durationMs: run.durationMs,
 		},
+		timings: {
+			profileFetchMs: options.profileFetchMs ?? 0,
+			deterministicMs,
+			semanticMs,
+			totalMs: Date.now() - totalStarted,
+		},
 		// Included for human-readable proxy logs only. The server must recompute these.
 		summary,
 	};
@@ -210,12 +270,14 @@ export async function runReadiness(
 	let authError = "";
 	let auth: AuthData;
 	try {
-		auth = await login(
-			(message) => {
-				authError = message;
-			},
-			() => {},
-		);
+		auth =
+			options.auth ??
+			(await login(
+				(message) => {
+					authError = message;
+				},
+				() => {},
+			));
 	} catch (error) {
 		return {
 			exitCode: 1,
@@ -248,6 +310,6 @@ export async function runReadiness(
 	const data = (await response.json()) as { report?: { id?: string } };
 	return {
 		exitCode: 0,
-		message: `Stored report ${data.report?.id ?? ""} · Level ${summary.level} · ${summary.passRate}% pass · ${summary.criteriaTotal} criteria evaluated`,
+		message: `Stored report ${data.report?.id ?? ""} · ${selectedProfile.name} r${selectedProfile.activeVersion.revision} · Level ${summary.level} · ${summary.passRate}% pass · ${summary.criteriaTotal} evaluated · ${plan.criteriaOrder.length - summary.criteriaTotal} N/A`,
 	};
 }

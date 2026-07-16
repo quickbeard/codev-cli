@@ -26,6 +26,8 @@ Hub commands:
                       (--force, -f re-uploads every conversation)
   model               Switch the default model
   readiness           Analyze and upload readiness for the current repository
+                      (--profile <id-or-slug>, --agent <claude|codex|opencode>,
+                      --model <model-id> for Claude Code or Codex)
   restore [agent]     Restore an agent's pre-CoDev config
                       (no arg processes every agent)
   logs                Show the last run from the diagnostic log

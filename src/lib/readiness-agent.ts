@@ -133,7 +133,18 @@ export function claudeReadinessEnvOverrides(): NodeJS.ProcessEnv {
 export function buildReadinessPrompt(plan?: ReadinessEvaluationPlan): string {
 	const semanticIds = plan ? new Set(semanticCriterionIds(plan)) : undefined;
 	const rubric = semanticIds
-		? READINESS_RUBRIC.filter(({ id }) => semanticIds.has(id))
+		? (plan?.definitions
+				.filter(({ key }) => semanticIds.has(key))
+				.map((criterion) => ({
+					id: criterion.key,
+					name: criterion.name,
+					category: criterion.category,
+					maturityLevel: criterion.maturityLevel,
+					description: criterion.description,
+					passCondition: criterion.passCondition,
+					evidenceRequired: criterion.evidenceRequirement,
+					semanticDecision: criterion.decision,
+				})) ?? [])
 		: READINESS_RUBRIC;
 	return `You are evaluating how ready a software repository is for autonomous coding agents.
 
@@ -145,16 +156,18 @@ Evaluate every semantic rubric criterion below. Semantic criteria must be pass o
 
 Return only the JSON object matching the supplied schema. Do not include aggregate scores.
 
-Rubric version: ${READINESS_RUBRIC_VERSION}
+Rubric version: ${plan?.analyzerVersion ?? READINESS_RUBRIC_VERSION}
 Fresh deterministic plan:
 ${plan ? readinessPlanPrompt(plan) : "No deterministic plan supplied."}
 Semantic rubric:
 ${JSON.stringify(rubric, null, 2)}`;
 }
 
-export function openCodeStructuredOutputInstruction(): string {
+export function openCodeStructuredOutputInstruction(
+	rubricVersion = READINESS_RUBRIC_VERSION,
+): string {
 	return `Return exactly one JSON object with this shape and no markdown fence:
-{"rubricVersion":"${READINESS_RUBRIC_VERSION}","languages":["string"],"applications":[{"path":".","description":"string","languages":["string"]}],"criteria":{"<every semantic rubric id>":{"status":"pass|fail|skipped","numerator":"integer or null","denominator":"positive integer","rationale":"string","evidence":["existing repository-relative path"]}},"warnings":["string"],"recommendations":["2 or 3 strings"],"model":"string or null"}
+{"rubricVersion":"${rubricVersion}","languages":["string"],"applications":[{"path":".","description":"string","languages":["string"]}],"criteria":{"<every semantic rubric id>":{"status":"pass|fail|skipped","numerator":"integer or null","denominator":"positive integer","rationale":"string","evidence":["existing repository-relative path"]}},"warnings":["string"],"recommendations":["2 or 3 strings"],"model":"string or null"}
 	Use null numerator only for skipped criteria. Include every criterion listed in the Semantic rubric exactly once and omit fixed-decision criteria.`;
 }
 
@@ -165,6 +178,7 @@ export function buildAgentCommand(
 	outputPath: string,
 	sessionId?: string,
 	modelOverride?: string,
+	rubricVersion = READINESS_RUBRIC_VERSION,
 ): { command: string; args: string[] } {
 	if (agent === "claude") {
 		const args = [
@@ -238,7 +252,7 @@ export function buildAgentCommand(
 		"json",
 		"-m",
 		readinessRuntimeConfig().opencodeModel,
-		`${prompt}\n\n${openCodeStructuredOutputInstruction()}`,
+		`${prompt}\n\n${openCodeStructuredOutputInstruction(rubricVersion)}`,
 	];
 	if (sessionId) args.push("--session", sessionId);
 	return { command: "opencode", args };
@@ -400,7 +414,10 @@ export async function runReadinessAgent(
 	writeFileSync(
 		schemaPath,
 		JSON.stringify(
-			readinessJsonSchema(plan ? semanticCriterionIds(plan) : undefined),
+			readinessJsonSchema(
+				plan ? semanticCriterionIds(plan) : undefined,
+				plan?.analyzerVersion,
+			),
 		),
 	);
 	let envOverrides: NodeJS.ProcessEnv = {};
@@ -454,6 +471,7 @@ export async function runReadinessAgent(
 			outputPath,
 			agent === "opencode" ? undefined : repair?.sessionId,
 			modelOverride,
+			plan?.analyzerVersion,
 		);
 		let result = await runProcess(
 			command.command,
@@ -474,6 +492,7 @@ export async function runReadinessAgent(
 				outputPath,
 				sessionId,
 				modelOverride,
+				plan?.analyzerVersion,
 			);
 			result = await runProcess(
 				continuation.command,

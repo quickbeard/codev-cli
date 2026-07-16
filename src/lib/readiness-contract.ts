@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
 // This is a protocol/schema identifier, not runtime configuration. Change it
@@ -365,7 +365,6 @@ export const READINESS_RUBRIC: ReadinessCriterionDefinition[] =
 	);
 
 export const READINESS_CRITERION_IDS = READINESS_RUBRIC.map(({ id }) => id);
-const CRITERION_SET = new Set(READINESS_CRITERION_IDS);
 
 export interface ReadinessSummary {
 	criteriaPassed: number;
@@ -414,9 +413,17 @@ function evidencePath(evidence: string): string {
 
 function isValidEvidence(root: string, evidence: string): boolean {
 	const path = evidencePath(evidence);
-	return Boolean(
-		path && isInside(root, path) && existsSync(resolve(root, path)),
-	);
+	if (!path || !isInside(root, path) || !existsSync(resolve(root, path)))
+		return false;
+	try {
+		const target = resolve(root, path);
+		return (
+			!lstatSync(target).isSymbolicLink() &&
+			isInside(realpathSync(root), realpathSync(target))
+		);
+	} catch {
+		return false;
+	}
 }
 
 export function normalizeReadinessEvidence(
@@ -442,13 +449,15 @@ export function normalizeReadinessEvidence(
 export function validateReadinessOutput(
 	value: unknown,
 	root: string,
+	criterionIds: string[] = READINESS_CRITERION_IDS,
+	rubricVersion = READINESS_RUBRIC_VERSION,
 ): string[] {
 	const errors: string[] = [];
 	if (!value || typeof value !== "object" || Array.isArray(value))
 		return ["Output must be a JSON object."];
 	const output = value as Partial<AgentReadinessOutput>;
-	if (output.rubricVersion !== READINESS_RUBRIC_VERSION)
-		errors.push(`rubricVersion must be ${READINESS_RUBRIC_VERSION}.`);
+	if (output.rubricVersion !== rubricVersion)
+		errors.push(`rubricVersion must be ${rubricVersion}.`);
 	if (
 		!Array.isArray(output.languages) ||
 		output.languages.some((v) => typeof v !== "string")
@@ -487,9 +496,10 @@ export function validateReadinessOutput(
 	) {
 		errors.push("criteria must be an object.");
 	} else {
+		const criterionSet = new Set(criterionIds);
 		for (const id of Object.keys(output.criteria))
-			if (!CRITERION_SET.has(id)) errors.push(`Unknown criterion: ${id}.`);
-		for (const id of READINESS_CRITERION_IDS) {
+			if (!criterionSet.has(id)) errors.push(`Unknown criterion: ${id}.`);
+		for (const id of criterionIds) {
 			const item = output.criteria[id];
 			if (!item) {
 				errors.push(`Missing criterion: ${id}.`);
@@ -542,6 +552,7 @@ export function validateReadinessOutput(
 
 export function readinessJsonSchema(
 	criterionIds: string[] = READINESS_CRITERION_IDS,
+	rubricVersion = READINESS_RUBRIC_VERSION,
 ): Record<string, unknown> {
 	const criterionSchema = {
 		type: "object",
@@ -570,7 +581,7 @@ export function readinessJsonSchema(
 		properties: {
 			rubricVersion: {
 				type: "string",
-				const: READINESS_RUBRIC_VERSION,
+				const: rubricVersion,
 			},
 			languages: { type: "array", items: { type: "string" } },
 			applications: {

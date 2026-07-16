@@ -21,6 +21,10 @@ import { initLogging, logWarn } from "@/lib/log.js";
 import { runLogs } from "@/lib/logs.js";
 import { runSkillOffice } from "@/lib/office.js";
 import { applyEnvProxy } from "@/lib/proxy.js";
+import {
+	parseReadinessArgs,
+	type ReadinessCliOptions,
+} from "@/lib/readiness-cli.js";
 import { ensureNodeSqliteOrReexec } from "@/lib/reexec.js";
 import { ensureFreshGatewayKey } from "@/lib/refresh.js";
 import {
@@ -561,13 +565,24 @@ switch (command) {
 		break;
 	}
 	case "readiness": {
-		const modelIndex = args.indexOf("--model");
-		const model = modelIndex >= 0 ? args[modelIndex + 1] : undefined;
-		if ((modelIndex >= 0 && !model) || args.length !== (model ? 2 : 0)) {
-			console.error("Usage: codev readiness [--model <model-id>]");
+		let readiness: ReadinessCliOptions;
+		try {
+			readiness = parseReadinessArgs(args);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
+			console.error(
+				"Usage: codevhub readiness [--profile <id-or-slug>] [--agent <claude|codex|opencode>] [--model <model-id>]",
+			);
 			process.exit(1);
+			break;
 		}
-		const { waitUntilExit } = render(<ReadinessApp options={{ model }} />);
+		const { waitUntilExit } = render(
+			<ReadinessApp
+				options={{ model: readiness.model }}
+				profileSelector={readiness.profile}
+				requestedAgent={readiness.agent}
+			/>,
+		);
 		try {
 			await waitUntilExit();
 			process.exit(0);
