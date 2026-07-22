@@ -14,6 +14,7 @@ import {
 	finalizeReadinessOutput,
 	semanticCriterionIds,
 } from "@/lib/readiness-plan.js";
+import { bundledStandardProfile } from "@/lib/readiness-profile.js";
 
 const roots: string[] = [];
 
@@ -60,6 +61,28 @@ afterEach(() => {
 });
 
 describe("readiness evaluation plan", () => {
+	it("preserves built-in deterministic checks when Standard is cloned", () => {
+		const root = repository({
+			"package.json": '{"scripts":{"test":"vitest"}}',
+			".pre-commit-config.yaml": "repos: []",
+		});
+		const standard = buildReadinessEvaluationPlan(root);
+		const clonedProfile = {
+			...structuredClone(bundledStandardProfile()),
+			id: "personal-clone",
+			ownerProfileId: "user-1",
+			slug: "personal-clone",
+			scope: "personal",
+			isDefault: false,
+		};
+		const cloned = buildReadinessEvaluationPlan(root, clonedProfile);
+
+		expect(cloned.criteria.pre_commit_hooks).toEqual(
+			standard.criteria.pre_commit_hooks,
+		);
+		expect(cloned.criteria.agents_md).toEqual(standard.criteria.agents_md);
+	});
+
 	it("recognizes env template naming variants only when env configuration is relevant", () => {
 		const root = repository({
 			"package.json": '{"scripts":{"start":"node src/index.js"}}',
@@ -253,6 +276,16 @@ describe("readiness evaluation plan", () => {
 		).toBeGreaterThanOrEqual(semanticCount);
 		expect(skipped.languages).toEqual(["TypeScript"]);
 		expect(skipped.applications).toEqual(passed.applications);
+		const highestPriorityFailure = plan.definitions
+			.filter(
+				(definition) => skipped.criteria[definition.key]?.status === "fail",
+			)
+			.toSorted((left, right) => left.priority - right.priority)[0];
+		if (!highestPriorityFailure)
+			throw new Error("Expected a failing criterion.");
+		expect(skipped.recommendations).toContain(
+			highestPriorityFailure.recommendationTemplate,
+		);
 	});
 
 	it("only skips database and API checks after high-confidence absence", () => {

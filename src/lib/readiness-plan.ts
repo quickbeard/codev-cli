@@ -8,6 +8,7 @@ import {
 	type ReadinessCriterionResult,
 } from "@/lib/readiness-contract.js";
 import {
+	builtInReadinessRuleKey,
 	bundledStandardProfile,
 	enabledProfileCriteria,
 	isStandardProfile,
@@ -659,7 +660,17 @@ export function buildReadinessEvaluationPlan(
 			selectedCriteria[definition.key] = decision;
 		}
 	} else {
-		for (const definition of definitions)
+		for (const definition of definitions) {
+			const builtInKey = builtInReadinessRuleKey(definition);
+			if (builtInKey) {
+				const decision = criteria[builtInKey];
+				if (!decision)
+					throw new Error(
+						`Readiness profile references unsupported built-in criterion: ${builtInKey}.`,
+					);
+				selectedCriteria[definition.key] = decision;
+				continue;
+			}
 			selectedCriteria[definition.key] = evaluateConfiguredCriterion(
 				definition,
 				{
@@ -668,6 +679,7 @@ export function buildReadinessEvaluationPlan(
 					trackedFiles,
 				},
 			);
+		}
 	}
 	const discoveredEvidence = Object.values(selectedCriteria).flatMap(
 		(decision) =>
@@ -729,6 +741,16 @@ export function finalizeReadinessOutput(
 			];
 		}),
 	) as Record<string, ReadinessCriterionResult>;
+	const configuredRecommendations = plan.definitions
+		.filter((definition) => criteria[definition.key]?.status === "fail")
+		.toSorted((left, right) => left.priority - right.priority)
+		.map((definition) => definition.recommendationTemplate);
+	const agentRecommendations = Array.isArray(output.recommendations)
+		? output.recommendations
+		: [];
+	const recommendations = [
+		...new Set([...configuredRecommendations, ...agentRecommendations]),
+	].slice(0, 3);
 	return {
 		...output,
 		rubricVersion: plan.analyzerVersion,
@@ -737,13 +759,13 @@ export function finalizeReadinessOutput(
 		criteria,
 		warnings: [...new Set(warnings)],
 		recommendations:
-			Array.isArray(output.recommendations) &&
-			output.recommendations.length >= 2
-				? output.recommendations.slice(0, 3)
+			recommendations.length >= 2
+				? recommendations
 				: [
+						...recommendations,
 						"Address the highest-impact failing readiness criteria.",
 						"Document and automate the repository's development workflow.",
-					],
+					].slice(0, 3),
 		model: typeof output.model === "string" ? output.model : null,
 	};
 }

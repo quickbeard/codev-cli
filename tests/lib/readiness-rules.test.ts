@@ -38,7 +38,7 @@ function criterion(
 		evidenceLocators: [
 			{ type: "manifest_script", manifest: "package.json", name: "test" },
 		],
-		decision: { engine: "deterministic", expected: "present" },
+		decision: { engine: "deterministic", match: "any" },
 		recommendationTemplate: "Add tests.",
 		priority: 1,
 		...overrides,
@@ -84,6 +84,95 @@ describe("declarative readiness rules", () => {
 		});
 		expect(() => evaluateConfiguredCriterion(configured, inventory)).toThrow(
 			/unsupported constructs/,
+		);
+	});
+
+	it("passes an absence check when prohibited evidence is missing", () => {
+		const inventory = repository({ README: "notes" });
+		const configured = criterion({
+			evidenceLocators: [{ type: "tracked_path_exists", path: ".env" }],
+			decision: { engine: "deterministic", match: "none" },
+		});
+		expect(evaluateConfiguredCriterion(configured, inventory)).toMatchObject({
+			mode: "deterministic",
+			result: { status: "pass", evidence: [] },
+		});
+	});
+
+	it("combines locator results with any, all, and minimum policies", () => {
+		const inventory = repository({
+			"package.json": JSON.stringify({ scripts: { test: "vitest" } }),
+		});
+		const evidenceLocators = [
+			{
+				type: "manifest_script" as const,
+				manifest: "package.json",
+				name: "test",
+			},
+			{
+				type: "manifest_script" as const,
+				manifest: "package.json",
+				name: "lint",
+			},
+		];
+		expect(
+			evaluateConfiguredCriterion(
+				criterion({
+					evidenceLocators,
+					decision: { engine: "deterministic", match: "any" },
+				}),
+				inventory,
+			),
+		).toMatchObject({ result: { status: "pass" } });
+		expect(
+			evaluateConfiguredCriterion(
+				criterion({
+					evidenceLocators,
+					decision: { engine: "deterministic", match: "all" },
+				}),
+				inventory,
+			),
+		).toMatchObject({ result: { status: "fail" } });
+		expect(
+			evaluateConfiguredCriterion(
+				criterion({
+					evidenceLocators,
+					decision: { engine: "deterministic", match: "minimum", minimum: 1 },
+				}),
+				inventory,
+			),
+		).toMatchObject({ result: { status: "pass" } });
+	});
+
+	it("compares typed manifest setting values without string coercion", () => {
+		const inventory = repository({
+			"package.json": JSON.stringify({ private: true, engines: { node: 22 } }),
+		});
+		const booleanSetting = criterion({
+			evidenceLocators: [
+				{
+					type: "manifest_setting",
+					manifest: "package.json",
+					path: "private",
+					value: true,
+				},
+			],
+		});
+		const numberSetting = criterion({
+			evidenceLocators: [
+				{
+					type: "manifest_setting",
+					manifest: "package.json",
+					path: "engines.node",
+					value: 22,
+				},
+			],
+		});
+		expect(
+			evaluateConfiguredCriterion(booleanSetting, inventory),
+		).toMatchObject({ result: { status: "pass" } });
+		expect(evaluateConfiguredCriterion(numberSetting, inventory)).toMatchObject(
+			{ result: { status: "pass" } },
 		);
 	});
 });

@@ -45,6 +45,7 @@ export interface ReadinessProfileVersion {
 
 export interface ReadinessProfile {
 	id: string;
+	ownerProfileId: string | null;
 	name: string;
 	slug: string;
 	description: string;
@@ -142,6 +143,10 @@ export function decodeReadinessProfile(value: unknown): ReadinessProfile {
 	}
 	const decoded: ReadinessProfile = {
 		id: text(profile.id, "id", 200),
+		ownerProfileId:
+			typeof profile.ownerProfileId === "string"
+				? profile.ownerProfileId
+				: null,
 		name: text(profile.name, "name", 200),
 		slug: text(profile.slug, "slug", 200),
 		description:
@@ -226,8 +231,14 @@ export function selectReadinessProfile(
 		return matches[0];
 	}
 	if (profiles.length === 1) return profiles[0];
-	const defaults = profiles.filter((profile) => profile.isDefault);
-	return defaults.length === 1 ? defaults[0] : undefined;
+	const personalDefault = profiles.find(
+		(profile) => profile.isDefault && profile.scope === "personal",
+	);
+	if (personalDefault) return personalDefault;
+	const systemDefaults = profiles.filter(
+		(profile) => profile.isDefault && profile.scope === "system",
+	);
+	return systemDefaults.length === 1 ? systemDefaults[0] : undefined;
 }
 
 export function enabledProfileCriteria(
@@ -241,6 +252,20 @@ export function enabledProfileCriteria(
 		);
 }
 
+export function builtInReadinessRuleKey(
+	criterion: ReadinessCriterionConfig,
+): string | undefined {
+	const decision = record(criterion.decision);
+	if (decision?.engine !== "builtin") return undefined;
+	const ruleKey =
+		typeof decision.ruleKey === "string" ? decision.ruleKey : criterion.key;
+	if (ruleKey !== criterion.key)
+		throw new Error(
+			`Readiness built-in rule key for ${criterion.key} does not match its criterion key.`,
+		);
+	return ruleKey;
+}
+
 export function isStandardProfile(profile: ReadinessProfile): boolean {
 	return profile.slug === "standard" && profile.scope === "system";
 }
@@ -248,6 +273,7 @@ export function isStandardProfile(profile: ReadinessProfile): boolean {
 export function bundledStandardProfile(): ReadinessProfile {
 	return {
 		id: "builtin:standard",
+		ownerProfileId: null,
 		name: "Standard",
 		slug: "standard",
 		description: "Built-in CoDev Standard readiness profile.",
@@ -274,7 +300,7 @@ export function bundledStandardProfile(): ReadinessProfile {
 					evidenceRequirement: criterion.evidenceRequired,
 					applicability: { kind: "always" },
 					evidenceLocators: [],
-					decision: { engine: "builtin" },
+					decision: { engine: "builtin", ruleKey: criterion.id },
 					recommendationTemplate: `Address ${criterion.id.replaceAll("_", " ")}.`,
 					priority: criterion.maturityLevel,
 				})),

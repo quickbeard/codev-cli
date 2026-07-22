@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadApiKey } from "@/lib/auth.js";
+import { type ApiKeyCreds, loadApiKey } from "@/lib/auth.js";
 import { detectConfiguredTools } from "@/lib/configure.js";
 import { AI_GATEWAY_OPENAI_URL } from "@/lib/const.js";
 import { readinessRuntimeConfig } from "@/lib/readiness-config.js";
@@ -113,6 +113,27 @@ export function readinessProcessEnv(
 		...base,
 		PATH: stripShimDirFromPath(base.PATH),
 		...overrides,
+	};
+}
+
+export function openCodeReadinessConfig(
+	credentials: ApiKeyCreds,
+	model: string,
+) {
+	return {
+		$schema: "https://opencode.ai/config.json",
+		model: `aigateway/${model}`,
+		provider: {
+			aigateway: {
+				npm: "@ai-sdk/openai-compatible",
+				name: "AI Gateway",
+				options: {
+					baseURL: credentials.baseUrl ?? AI_GATEWAY_OPENAI_URL(),
+					apiKey: credentials.apiKey,
+				},
+				models: { [model]: { name: model } },
+			},
+		},
 	};
 }
 
@@ -436,21 +457,7 @@ export async function runReadinessAgent(
 		);
 		writeFileSync(
 			join(configDir, "opencode.json"),
-			JSON.stringify({
-				$schema: "https://opencode.ai/config.json",
-				model: `aigateway/${model}`,
-				provider: {
-					aigateway: {
-						npm: "@ai-sdk/openai-compatible",
-						name: "AI Gateway",
-						options: {
-							baseURL: credentials.baseUrl ?? AI_GATEWAY_OPENAI_URL,
-							apiKey: credentials.apiKey,
-						},
-						models: { [model]: { name: model } },
-					},
-				},
-			}),
+			JSON.stringify(openCodeReadinessConfig(credentials, model)),
 			{ mode: 0o600 },
 		);
 		envOverrides = {

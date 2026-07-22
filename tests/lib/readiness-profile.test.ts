@@ -32,6 +32,21 @@ describe("readiness profiles", () => {
 		);
 	});
 
+	it("prefers a personal default over the shared system default", () => {
+		const standard = bundledStandardProfile();
+		const personal = {
+			...structuredClone(standard),
+			id: "personal-id",
+			ownerProfileId: "user-1",
+			slug: "personal",
+			scope: "personal",
+			activeVersion: { ...standard.activeVersion, id: "personal-version" },
+		};
+		expect(selectReadinessProfile([standard, personal])?.id).toBe(
+			"personal-id",
+		);
+	});
+
 	it("rejects unsafe or duplicate dynamic criterion keys", () => {
 		const profile = structuredClone(bundledStandardProfile());
 		const first = profile.activeVersion.definition.criteria[0];

@@ -10,6 +10,7 @@ import {
 	buildReadinessPrompt,
 	claudeReadinessEnvOverrides,
 	extractAgentOutput,
+	openCodeReadinessConfig,
 	openCodeStructuredOutputInstruction,
 	providerFailureFromLine,
 	readinessProcessEnv,
@@ -207,6 +208,18 @@ describe("readiness contract", () => {
 		expect(instruction).toContain(
 			"every criterion listed in the Semantic rubric",
 		);
+	});
+
+	it("writes a concrete gateway URL into the isolated OpenCode config", () => {
+		const config = openCodeReadinessConfig(
+			{ apiKey: "sk-test" },
+			"MiniMax/MiniMax-M2.7",
+		);
+
+		expect(config.provider.aigateway.options.baseURL).toMatch(
+			/^https?:\/\/.+\/v1$/,
+		);
+		expect(JSON.stringify(config)).not.toContain("undefined/chat/completions");
 	});
 
 	it("removes CoDev shims from readiness subprocess PATH resolution", () => {

@@ -302,13 +302,10 @@ export function evaluateConfiguredCriterion(
 				`The applicability rule for ${criterion.name} did not match.`,
 			),
 		};
-	const evidence = [
-		...new Set(
-			criterion.evidenceLocators.flatMap((locator) =>
-				predicateMatches(locator, inventory, budget),
-			),
-		),
-	].slice(0, MAX_EVIDENCE);
+	const locatorEvidence = criterion.evidenceLocators.map((locator) =>
+		predicateMatches(locator, inventory, budget),
+	);
+	const evidence = [...new Set(locatorEvidence.flat())].slice(0, MAX_EVIDENCE);
 	const decision = record(criterion.decision);
 	const engine =
 		typeof decision?.engine === "string" ? decision.engine : undefined;
@@ -325,9 +322,19 @@ export function evaluateConfiguredCriterion(
 		throw new Error(
 			`Unsupported readiness decision engine for ${criterion.key}.`,
 		);
-	const expected = decision?.expected === "absent" ? "absent" : "present";
+	const match = decision?.match;
+	const matched = locatorEvidence.filter(
+		(entries) => entries.length > 0,
+	).length;
+	const minimum = decision?.minimum;
 	const passed =
-		expected === "present" ? evidence.length > 0 : evidence.length === 0;
+		match === "none"
+			? matched === 0
+			: match === "all"
+				? locatorEvidence.length > 0 && matched === locatorEvidence.length
+				: match === "minimum"
+					? matched >= (minimum as number)
+					: matched > 0;
 	const rationale = passed
 		? typeof decision?.passRationale === "string"
 			? decision.passRationale
@@ -350,10 +357,45 @@ function validateConfiguredCriterion(
 	for (const locator of criterion.evidenceLocators)
 		predicateMatches(locator, inventory, budget);
 	const engine = record(criterion.decision)?.engine;
+	if (engine === "builtin") {
+		const ruleKey = record(criterion.decision)?.ruleKey;
+		if (ruleKey !== criterion.key)
+			throw new Error(
+				`Readiness built-in rule key for ${criterion.key} is invalid.`,
+			);
+		return;
+	}
 	if (engine !== "deterministic" && engine !== "semantic")
 		throw new Error(
 			`Unsupported readiness decision engine for ${criterion.key}.`,
 		);
+	if (engine === "deterministic") {
+		const decision = record(criterion.decision);
+		const match = decision?.match;
+		if (
+			match !== "any" &&
+			match !== "all" &&
+			match !== "none" &&
+			match !== "minimum"
+		)
+			throw new Error(
+				`Readiness deterministic match mode for ${criterion.key} is invalid.`,
+			);
+		if (criterion.evidenceLocators.length === 0)
+			throw new Error(
+				`Readiness deterministic locators for ${criterion.key} are required.`,
+			);
+		const minimum = decision?.minimum;
+		if (
+			match === "minimum" &&
+			(!Number.isSafeInteger(minimum) ||
+				(minimum as number) < 1 ||
+				(minimum as number) > criterion.evidenceLocators.length)
+		)
+			throw new Error(
+				`Readiness deterministic minimum for ${criterion.key} is invalid.`,
+			);
+	}
 }
 
 export function validateProfileRules(profile: ReadinessProfile): void {

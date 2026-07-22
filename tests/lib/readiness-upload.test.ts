@@ -13,6 +13,7 @@ const roots: string[] = [];
 function deterministicProfile(): ReadinessProfile {
 	return {
 		id: "profile-1",
+		ownerProfileId: "user-1",
 		name: "Focused",
 		slug: "focused",
 		description: "Focused profile",
@@ -46,7 +47,7 @@ function deterministicProfile(): ReadinessProfile {
 								name: "test",
 							},
 						],
-						decision: { engine: "deterministic", expected: "present" },
+						decision: { engine: "deterministic", match: "any" },
 						recommendationTemplate: "Add a test script.",
 						priority: 1,
 					},
