@@ -161,7 +161,10 @@ export function ReadinessApp({
 				profileFetchMs.current = Date.now() - started;
 				setLoginUrl(null);
 				setSession(loaded);
-				const chosen = selectReadinessProfile(loaded.profiles, profileSelector);
+				const chosen =
+					profileSelector || loaded.profiles.length === 1
+						? selectReadinessProfile(loaded.profiles, profileSelector)
+						: undefined;
 				if (chosen) {
 					setProfile(chosen);
 					if (requestedAgent) startRun(requestedAgent, chosen, loaded);

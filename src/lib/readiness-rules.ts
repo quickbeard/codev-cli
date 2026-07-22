@@ -313,9 +313,10 @@ export function evaluateConfiguredCriterion(
 		return {
 			mode: "semantic",
 			reason:
-				typeof decision?.instructions === "string"
-					? decision.instructions
-					: criterion.passCondition,
+				(typeof decision?.instructions === "string" &&
+					decision.instructions.trim()) ||
+				criterion.passCondition.trim() ||
+				criterion.description,
 			evidence,
 		};
 	if (engine !== "deterministic")
@@ -336,10 +337,13 @@ export function evaluateConfiguredCriterion(
 					? matched >= (minimum as number)
 					: matched > 0;
 	const rationale = passed
-		? typeof decision?.passRationale === "string"
+		? typeof decision?.passRationale === "string" &&
+			decision.passRationale.trim()
 			? decision.passRationale
-			: criterion.passCondition
-		: typeof decision?.failRationale === "string"
+			: criterion.passCondition ||
+				`Required evidence was found for ${criterion.name}.`
+		: typeof decision?.failRationale === "string" &&
+				decision.failRationale.trim()
 			? decision.failRationale
 			: `Required evidence was not established for ${criterion.name}.`;
 	return {

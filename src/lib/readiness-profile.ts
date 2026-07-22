@@ -75,6 +75,13 @@ function text(value: unknown, field: string, max = 4_000): string {
 	return value;
 }
 
+function optionalText(value: unknown, field: string, max = 4_000): string {
+	if (value === undefined || value === null) return "";
+	if (typeof value !== "string" || value.length > max)
+		throw new Error(`Readiness profile ${field} is invalid.`);
+	return value;
+}
+
 function integer(value: unknown, field: string, min = 0): number {
 	if (!Number.isSafeInteger(value) || (value as number) < min)
 		throw new Error(`Readiness profile ${field} is invalid.`);
@@ -99,21 +106,21 @@ function decodeCriterion(value: unknown): ReadinessCriterionConfig {
 	return {
 		key,
 		name: text(item.name, `${key}.name`, 200),
-		category: text(item.category, `${key}.category`, 200),
-		description: text(item.description, `${key}.description`),
+		category: optionalText(item.category, `${key}.category`, 200),
+		description: optionalText(item.description, `${key}.description`),
 		maturityLevel: integer(item.maturityLevel, `${key}.maturityLevel`, 1),
 		repositoryScope: text(item.repositoryScope, `${key}.repositoryScope`, 100),
 		enabled: item.enabled,
 		order: integer(item.order, `${key}.order`),
-		passCondition: text(item.passCondition, `${key}.passCondition`),
-		evidenceRequirement: text(
+		passCondition: optionalText(item.passCondition, `${key}.passCondition`),
+		evidenceRequirement: optionalText(
 			item.evidenceRequirement,
 			`${key}.evidenceRequirement`,
 		),
 		applicability: item.applicability,
 		evidenceLocators: item.evidenceLocators,
 		decision: item.decision,
-		recommendationTemplate: text(
+		recommendationTemplate: optionalText(
 			item.recommendationTemplate,
 			`${key}.recommendationTemplate`,
 		),

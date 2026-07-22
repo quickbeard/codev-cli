@@ -51,6 +51,28 @@ afterEach(() => {
 });
 
 describe("declarative readiness rules", () => {
+	it("uses useful default messages when optional rationale text is empty", () => {
+		const inventory = repository({
+			"package.json": JSON.stringify({ scripts: { test: "vitest" } }),
+		});
+		const configured = criterion({
+			passCondition: "",
+			decision: {
+				engine: "deterministic",
+				match: "any",
+				passRationale: "",
+				failRationale: "",
+			},
+		});
+		expect(evaluateConfiguredCriterion(configured, inventory)).toMatchObject({
+			mode: "deterministic",
+			result: {
+				status: "pass",
+				rationale: "Required evidence was found for Tests configured.",
+			},
+		});
+	});
+
 	it("evaluates bounded manifest predicates deterministically", () => {
 		const inventory = repository({
 			"package.json": JSON.stringify({ scripts: { test: "vitest" } }),

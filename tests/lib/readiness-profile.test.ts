@@ -54,4 +54,25 @@ describe("readiness profiles", () => {
 		first.key = "__proto__";
 		expect(() => decodeReadinessProfile(profile)).toThrow(/unsafe/);
 	});
+
+	it("accepts empty optional criterion metadata", () => {
+		const profile = structuredClone(bundledStandardProfile());
+		profile.slug = "custom";
+		const criterion = profile.activeVersion.definition.criteria[0];
+		if (!criterion) throw new Error("Standard profile fixture is empty.");
+		criterion.category = "";
+		criterion.description = "";
+		criterion.passCondition = "";
+		criterion.evidenceRequirement = "";
+		criterion.recommendationTemplate = "";
+		expect(
+			decodeReadinessProfile(profile).activeVersion.definition.criteria[0],
+		).toMatchObject({
+			category: "",
+			description: "",
+			passCondition: "",
+			evidenceRequirement: "",
+			recommendationTemplate: "",
+		});
+	});
 });

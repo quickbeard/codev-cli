@@ -744,7 +744,8 @@ export function finalizeReadinessOutput(
 	const configuredRecommendations = plan.definitions
 		.filter((definition) => criteria[definition.key]?.status === "fail")
 		.toSorted((left, right) => left.priority - right.priority)
-		.map((definition) => definition.recommendationTemplate);
+		.map((definition) => definition.recommendationTemplate.trim())
+		.filter(Boolean);
 	const agentRecommendations = Array.isArray(output.recommendations)
 		? output.recommendations
 		: [];
