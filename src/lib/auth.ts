@@ -531,6 +531,30 @@ async function refreshToAuthData(refreshToken: string): Promise<AuthData> {
 	};
 }
 
+export interface InteractiveAuthCallbacks {
+	onLoginUrl?: (url: string) => void;
+	onManualSubmit?: (submit: (pasted: string) => string | null) => void;
+	onLoginDone?: () => void;
+}
+
+export async function ensureInteractiveAuth(
+	onStatus: (message: string) => void = () => {},
+	callbacks: InteractiveAuthCallbacks = {},
+): Promise<AuthData> {
+	const auth = loadAuth();
+	if (auth) return auth;
+
+	const fresh = await login(onStatus, (openBrowser, url, submitManualCode) => {
+		if (callbacks.onLoginUrl) callbacks.onLoginUrl(url);
+		else
+			onStatus(`If your browser didn't open, visit this URL manually: ${url}`);
+		callbacks.onManualSubmit?.(submitManualCode);
+		openBrowser();
+	});
+	callbacks.onLoginDone?.();
+	return fresh;
+}
+
 // Non-interactive SSO: return a usable session WITHOUT ever prompting — reuse a
 // non-expired cached session, else silently refresh via the stored
 // refresh_token. Returns null when neither works (no browser/paste fallback), so

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { type AuthData, login } from "@/lib/auth.js";
+import { type AuthData, ensureInteractiveAuth } from "@/lib/auth.js";
 import { BACKEND_URL } from "@/lib/const.js";
 import {
 	type AgentRunResult,
@@ -58,6 +58,9 @@ export interface ReadinessOptions {
 	profile?: ReadinessProfile;
 	auth?: AuthData;
 	profileFetchMs?: number;
+	onLoginUrl?: (url: string) => void;
+	onManualSubmit?: (submit: (pasted: string) => string | null) => void;
+	onLoginDone?: () => void;
 }
 
 export function gatewayToolForReadiness(
@@ -272,11 +275,16 @@ export async function runReadiness(
 	try {
 		auth =
 			options.auth ??
-			(await login(
+			(await ensureInteractiveAuth(
 				(message) => {
 					authError = message;
+					onProgress(message);
 				},
-				() => {},
+				{
+					onLoginUrl: options.onLoginUrl,
+					onManualSubmit: options.onManualSubmit,
+					onLoginDone: options.onLoginDone,
+				},
 			));
 	} catch (error) {
 		return {

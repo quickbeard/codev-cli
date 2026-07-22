@@ -1,8 +1,9 @@
-import { Box, Text, useApp } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
 import Spinner from "ink-spinner";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Banner } from "@/components/Banner.js";
 import { Frame } from "@/components/Frame.js";
+import { PasteBackPrompt, usePasteBack } from "@/components/PasteBack.js";
 import {
 	ReadinessAgentSelect,
 	readinessAgentSelectTitle,
@@ -18,7 +19,7 @@ import {
 	runReadiness,
 } from "@/lib/readiness.js";
 import {
-	isAgentAvailable,
+	isReadinessAgentAvailable,
 	READINESS_AGENTS,
 	type ReadinessAgent,
 } from "@/lib/readiness-agent.js";
@@ -60,17 +61,30 @@ export function ReadinessApp({
 		() =>
 			available ??
 			(Object.fromEntries(
-				READINESS_AGENTS.map((agent) => [agent, isAgentAvailable(agent)]),
+				READINESS_AGENTS.map((agent) => [
+					agent,
+					isReadinessAgentAvailable(agent),
+				]),
 			) as Record<ReadinessAgent, boolean>),
 		[available],
 	);
 	const [phase, setPhase] = useState<Phase>("loading-profiles");
 	const [agent, setAgent] = useState<ReadinessAgent | null>(null);
 	const [progress, setProgress] = useState("Loading readiness profiles");
+	const [loginUrl, setLoginUrl] = useState<string | null>(null);
 	const [result, setResult] = useState<ReadinessRunResult | null>(null);
 	const [session, setSession] = useState<ReadinessProfileSession | null>(null);
 	const [profile, setProfile] = useState<ReadinessProfile | null>(null);
 	const profileFetchMs = useRef(0);
+	// Keep stdin referenced across the async SSO-to-selector transition. Without
+	// continuous input ownership, Ink can emit `beforeExit` after the callback
+	// server closes and unmount just as the agent selector becomes interactive.
+	useInput(() => undefined, {
+		isActive: phase !== "done" && phase !== "failed",
+	});
+	const paste = usePasteBack(
+		loginUrl !== null && phase !== "failed" && phase !== "done",
+	);
 	const hasAvailableAgent = READINESS_AGENTS.some(
 		(candidate) => detected[candidate],
 	);
@@ -90,12 +104,18 @@ export function ReadinessApp({
 				return;
 			}
 			setAgent(choice);
+			setLoginUrl(null);
 			setPhase("running");
 			run(choice, setProgress, {
 				...options,
 				profile: chosen,
 				auth: loaded.auth,
 				profileFetchMs: profileFetchMs.current,
+				onLoginUrl: setLoginUrl,
+				onManualSubmit: (submit) => {
+					paste.submitRef.current = submit;
+				},
+				onLoginDone: () => setLoginUrl(null),
 			})
 				.then((next) => {
 					setResult(next);
@@ -109,7 +129,7 @@ export function ReadinessApp({
 					setPhase("failed");
 				});
 		},
-		[detected, run, options],
+		[detected, run, options, paste.submitRef],
 	);
 	const chooseProfile = useCallback(
 		(chosen: ReadinessProfile, loaded = session) => {
@@ -130,10 +150,16 @@ export function ReadinessApp({
 	useEffect(() => {
 		let active = true;
 		const started = Date.now();
-		loadProfiles(setProgress)
+		loadProfiles(setProgress, {
+			onLoginUrl: setLoginUrl,
+			onManualSubmit: (submit) => {
+				paste.submitRef.current = submit;
+			},
+		})
 			.then((loaded) => {
 				if (!active) return;
 				profileFetchMs.current = Date.now() - started;
+				setLoginUrl(null);
 				setSession(loaded);
 				const chosen = selectReadinessProfile(loaded.profiles, profileSelector);
 				if (chosen) {
@@ -153,24 +179,49 @@ export function ReadinessApp({
 		return () => {
 			active = false;
 		};
-	}, [loadProfiles, profileSelector, requestedAgent, startRun]);
+	}, [
+		loadProfiles,
+		profileSelector,
+		requestedAgent,
+		startRun,
+		paste.submitRef,
+	]);
 
 	useEffect(() => {
-		if (phase !== "done") return;
-		const timer = setTimeout(() => exit(), 50);
+		if (phase !== "done" && phase !== "failed") return;
+		const timer = setTimeout(() => {
+			if (phase === "failed")
+				exit(new Error(result?.message ?? "Readiness failed."));
+			else exit();
+		}, 50);
 		return () => clearTimeout(timer);
-	}, [phase, exit]);
+	}, [phase, result, exit]);
 
 	return (
 		<Box flexDirection="column">
 			<Banner />
 			<Frame tag="AGENT READINESS">
 				{phase === "loading-profiles" && (
-					<Box>
-						<Text color="cyan">
-							<Spinner />
-						</Text>
-						<Text>{` ${progress}...`}</Text>
+					<Box flexDirection="column">
+						<Box>
+							<Text color="cyan">
+								<Spinner />
+							</Text>
+							<Text>{` ${progress}...`}</Text>
+						</Box>
+						{loginUrl && !paste.submitting && (
+							<Box flexDirection="column" marginTop={1}>
+								<Text dimColor>
+									{"If the browser didn't open, visit this URL manually:"}
+								</Text>
+								<Text>{loginUrl}</Text>
+								<PasteBackPrompt
+									pasteValue={paste.pasteValue}
+									pasteError={paste.pasteError}
+									submitting={paste.submitting}
+								/>
+							</Box>
+						)}
 					</Box>
 				)}
 				{phase !== "loading-profiles" && !hasAvailableAgent && (
@@ -196,30 +247,47 @@ export function ReadinessApp({
 						/>
 					</Step>
 				)}
-				{phase !== "loading-profiles" && phase !== "select-profile" && (
-					<Step
-						active={phase === "select-agent"}
-						title={readinessAgentSelectTitle(phase !== "select-agent")}
-					>
-						<ReadinessAgentSelect
-							available={detected}
-							selected={agent}
-							readOnly={phase !== "select-agent" || !hasAvailableAgent}
-							onSelect={selectAgent}
-						/>
-					</Step>
-				)}
+				{profile &&
+					phase !== "loading-profiles" &&
+					phase !== "select-profile" && (
+						<Step
+							active={phase === "select-agent"}
+							title={readinessAgentSelectTitle(phase !== "select-agent")}
+						>
+							<ReadinessAgentSelect
+								available={detected}
+								selected={agent}
+								readOnly={phase !== "select-agent" || !hasAvailableAgent}
+								onSelect={selectAgent}
+							/>
+						</Step>
+					)}
 				{["running", "done", "failed"].includes(phase) && profile && (
 					<Step
 						active={phase === "running"}
 						title={<Text bold>Evaluate repository</Text>}
 					>
 						{phase === "running" ? (
-							<Box>
-								<Text color="cyan">
-									<Spinner />
-								</Text>
-								<Text>{` ${progress}...`}</Text>
+							<Box flexDirection="column">
+								<Box>
+									<Text color="cyan">
+										<Spinner />
+									</Text>
+									<Text>{` ${progress}...`}</Text>
+								</Box>
+								{loginUrl && !paste.submitting && (
+									<Box flexDirection="column" marginTop={1}>
+										<Text dimColor>
+											{"If the browser didn't open, visit this URL manually:"}
+										</Text>
+										<Text>{loginUrl}</Text>
+										<PasteBackPrompt
+											pasteValue={paste.pasteValue}
+											pasteError={paste.pasteError}
+											submitting={paste.submitting}
+										/>
+									</Box>
+								)}
 							</Box>
 						) : (
 							<Text color={phase === "done" ? "green" : "red"}>
@@ -230,7 +298,12 @@ export function ReadinessApp({
 					</Step>
 				)}
 				{phase === "failed" && (
-					<Text dimColor>Fix the issue above and rerun `codev readiness`.</Text>
+					<Box flexDirection="column">
+						<Text color="red">✗ {result?.message ?? "Readiness failed."}</Text>
+						<Text dimColor>
+							Fix the issue above and rerun `codevhub readiness`.
+						</Text>
+					</Box>
 				)}
 			</Frame>
 		</Box>

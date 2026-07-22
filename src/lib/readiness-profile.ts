@@ -1,5 +1,8 @@
-import type { AuthData } from "@/lib/auth.js";
-import { login } from "@/lib/auth.js";
+import {
+	type AuthData,
+	ensureInteractiveAuth,
+	type InteractiveAuthCallbacks,
+} from "@/lib/auth.js";
 import { BACKEND_URL } from "@/lib/const.js";
 import { loggedFetch } from "@/lib/log.js";
 import {
@@ -175,17 +178,20 @@ export function decodeReadinessProfile(value: unknown): ReadinessProfile {
 	return decoded;
 }
 
+export type ReadinessLoginCallbacks = Pick<
+	InteractiveAuthCallbacks,
+	"onLoginUrl" | "onManualSubmit"
+>;
+
 export async function fetchReadinessProfiles(
 	onStatus: (message: string) => void = () => {},
+	callbacks: ReadinessLoginCallbacks = {},
 ): Promise<ReadinessProfileSession> {
 	let authError = "";
-	const auth = await login(
-		(message) => {
-			authError = message;
-			onStatus(message);
-		},
-		() => {},
-	).catch((error) => {
+	const auth = await ensureInteractiveAuth((message) => {
+		authError = message;
+		onStatus(message);
+	}, callbacks).catch((error) => {
 		throw new Error(
 			authError || (error instanceof Error ? error.message : String(error)),
 		);

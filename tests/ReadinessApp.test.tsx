@@ -53,4 +53,24 @@ describe("ReadinessApp", () => {
 		await settle(200);
 		expect(lastFrame()).toContain("No supported coding agent is available");
 	});
+
+	it("shows a profile-load failure instead of a read-only agent picker", async () => {
+		const loadError = new Error(
+			"Readiness profile fetch failed (503): unavailable",
+		);
+		const { frames } = render(
+			<ReadinessApp
+				available={{ claude: true, codex: true, opencode: true }}
+				run={vi.fn()}
+				loadProfiles={vi.fn(async () => {
+					throw loadError;
+				})}
+			/>,
+		);
+
+		await settle(100);
+		const output = frames.join("\n");
+		expect(output).toContain(loadError.message);
+		expect(output).not.toContain("Choose coding agent");
+	});
 });

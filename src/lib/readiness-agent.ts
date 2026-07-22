@@ -28,10 +28,14 @@ import { stripShimDirFromPath } from "@/lib/shims.js";
 export const READINESS_AGENTS = ["claude", "codex", "opencode"] as const;
 export type ReadinessAgent = (typeof READINESS_AGENTS)[number];
 
-export function assertReadinessPrerequisites(agent: ReadinessAgent): void {
-	if (agent === "codex" && isAgentAvailable(agent)) return;
+export function isReadinessAgentAvailable(agent: ReadinessAgent): boolean {
+	if (agent === "codex" && isAgentAvailable(agent)) return true;
 	const tool = agent === "claude" ? "claude-code" : agent;
-	if (detectConfiguredTools().includes(tool)) return;
+	return detectConfiguredTools().includes(tool);
+}
+
+export function assertReadinessPrerequisites(agent: ReadinessAgent): void {
+	if (isReadinessAgentAvailable(agent)) return;
 	throw new Error(
 		`${agent === "claude" ? "Claude Code" : agent === "codex" ? "Codex" : "OpenCode"} is not configured by CoDev. Run \`codev install\`, select this agent, and retry the readiness scan.`,
 	);
