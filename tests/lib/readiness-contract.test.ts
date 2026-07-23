@@ -212,12 +212,15 @@ describe("readiness contract", () => {
 
 	it("writes a concrete gateway URL into the isolated OpenCode config", () => {
 		const config = openCodeReadinessConfig(
-			{ apiKey: "sk-test" },
+			{
+				apiKey: "sk-test",
+				baseUrl: "https://gateway.example.test/v1",
+			},
 			"MiniMax/MiniMax-M2.7",
 		);
 
-		expect(config.provider.aigateway.options.baseURL).toMatch(
-			/^https?:\/\/.+\/v1$/,
+		expect(config.provider.aigateway.options.baseURL).toBe(
+			"https://gateway.example.test/v1",
 		);
 		expect(JSON.stringify(config)).not.toContain("undefined/chat/completions");
 	});
