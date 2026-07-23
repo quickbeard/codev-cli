@@ -190,16 +190,13 @@ the agent's evidence against its versioned rubric, computes scores locally,
 rejects scans that change the working tree, and uploads the validated report.
 The report is a local agent evaluation, not a server-verified audit.
 
-During development use `bun dev readiness`. Factory fixtures and benchmark
-utilities live in the separate top-level `agent-readiness-benchmarks` package;
-they are not shipped with or imported by the CLI.
-
 Readiness uses each harness's configured default model for Claude Code and
 Codex; `codev readiness --model <model-id>` provides a one-off override for
 those harnesses. OpenCode readiness always uses
 `aigateway/MiniMax/MiniMax-M2.7`. Repair, timeout, and output limits are bounded
 product safeguards rather than user configuration. The selected harness must
-first be configured through `codev install`.
+first be configured through `codevhub install`.
+
 The rubric version is deliberately not configurable: it identifies the actual
 report schema and scoring rubric shared by CLI, proxy, and dashboard.
 
