@@ -64,7 +64,6 @@ describe("readiness profiles", () => {
 		criterion.description = "";
 		criterion.passCondition = "";
 		criterion.evidenceRequirement = "";
-		criterion.recommendationTemplate = "";
 		expect(
 			decodeReadinessProfile(profile).activeVersion.definition.criteria[0],
 		).toMatchObject({
@@ -72,7 +71,6 @@ describe("readiness profiles", () => {
 			description: "",
 			passCondition: "",
 			evidenceRequirement: "",
-			recommendationTemplate: "",
 		});
 	});
 });

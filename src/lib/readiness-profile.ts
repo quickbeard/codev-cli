@@ -29,7 +29,6 @@ export interface ReadinessCriterionConfig {
 	applicability: unknown;
 	evidenceLocators: unknown[];
 	decision: unknown;
-	recommendationTemplate: string;
 	priority: number;
 }
 
@@ -120,10 +119,6 @@ function decodeCriterion(value: unknown): ReadinessCriterionConfig {
 		applicability: item.applicability,
 		evidenceLocators: item.evidenceLocators,
 		decision: item.decision,
-		recommendationTemplate: optionalText(
-			item.recommendationTemplate,
-			`${key}.recommendationTemplate`,
-		),
 		priority: integer(item.priority, `${key}.priority`),
 	};
 }
@@ -314,7 +309,6 @@ export function bundledStandardProfile(): ReadinessProfile {
 					applicability: { kind: "always" },
 					evidenceLocators: [],
 					decision: { engine: "builtin", ruleKey: criterion.id },
-					recommendationTemplate: `Address ${criterion.id.replaceAll("_", " ")}.`,
 					priority: criterion.maturityLevel,
 				})),
 			},

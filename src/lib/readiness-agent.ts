@@ -192,7 +192,7 @@ export function openCodeStructuredOutputInstruction(
 	rubricVersion = READINESS_RUBRIC_VERSION,
 ): string {
 	return `Return exactly one JSON object with this shape and no markdown fence:
-{"rubricVersion":"${rubricVersion}","languages":["string"],"applications":[{"path":".","description":"string","languages":["string"]}],"criteria":{"<every semantic rubric id>":{"status":"pass|fail|skipped","numerator":"integer or null","denominator":"positive integer","rationale":"string","evidence":["existing repository-relative path"]}},"warnings":["string"],"recommendations":["2 or 3 strings"],"model":"string or null"}
+{"rubricVersion":"${rubricVersion}","languages":["string"],"applications":[{"path":".","description":"string","languages":["string"]}],"criteria":{"<every semantic rubric id>":{"status":"pass|fail|skipped","numerator":"integer or null","denominator":"positive integer","rationale":"string","evidence":["existing repository-relative path"]}},"warnings":["string"],"recommendations":["0 to 3 contextual actions for failed criteria"],"model":"string or null"}
 	Use null numerator only for skipped criteria. Include every criterion listed in the Semantic rubric exactly once and omit fixed-decision criteria.`;
 }
 

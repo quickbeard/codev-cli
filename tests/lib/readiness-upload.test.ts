@@ -48,7 +48,6 @@ function deterministicProfile(): ReadinessProfile {
 							},
 						],
 						decision: { engine: "deterministic", match: "any" },
-						recommendationTemplate: "Add a test script.",
 						priority: 1,
 					},
 				],

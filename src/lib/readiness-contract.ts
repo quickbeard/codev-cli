@@ -540,11 +540,10 @@ export function validateReadinessOutput(
 		errors.push("warnings must be an array of strings.");
 	if (
 		!Array.isArray(output.recommendations) ||
-		output.recommendations.length < 2 ||
 		output.recommendations.length > 3 ||
 		output.recommendations.some((v) => typeof v !== "string")
 	)
-		errors.push("recommendations must contain 2 or 3 strings.");
+		errors.push("recommendations must contain at most 3 strings.");
 	if (output.model !== null && typeof output.model !== "string")
 		errors.push("model must be a string or null.");
 	return errors;
@@ -609,7 +608,7 @@ export function readinessJsonSchema(
 			warnings: { type: "array", items: { type: "string" } },
 			recommendations: {
 				type: "array",
-				minItems: 2,
+				minItems: 0,
 				maxItems: 3,
 				items: { type: "string" },
 			},

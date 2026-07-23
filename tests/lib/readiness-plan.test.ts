@@ -264,7 +264,15 @@ describe("readiness evaluation plan", () => {
 		const plan = buildReadinessEvaluationPlan(root);
 		const semanticCount = semanticCriterionIds(plan).length;
 
-		const skipped = finalizeReadinessOutput(agentOutput("skipped"), plan);
+		const skippedInput = agentOutput("skipped");
+		const namedCriterion = plan.definitions.find(
+			(definition) => definition.name !== definition.key,
+		);
+		if (!namedCriterion)
+			throw new Error("Expected a criterion with a display name.");
+		skippedInput.warnings = [`${namedCriterion.key} needs attention.`];
+		skippedInput.recommendations = ["Address N.", "Document the workflow."];
+		const skipped = finalizeReadinessOutput(skippedInput, plan);
 		const passed = finalizeReadinessOutput(agentOutput("pass"), plan);
 
 		expect(summarizeReadiness(skipped.criteria).criteriaTotal).toBe(
@@ -276,16 +284,12 @@ describe("readiness evaluation plan", () => {
 		).toBeGreaterThanOrEqual(semanticCount);
 		expect(skipped.languages).toEqual(["TypeScript"]);
 		expect(skipped.applications).toEqual(passed.applications);
-		const highestPriorityFailure = plan.definitions
-			.filter(
-				(definition) => skipped.criteria[definition.key]?.status === "fail",
-			)
-			.toSorted((left, right) => left.priority - right.priority)[0];
-		if (!highestPriorityFailure)
-			throw new Error("Expected a failing criterion.");
-		expect(skipped.recommendations).toContain(
-			highestPriorityFailure.recommendationTemplate,
+		expect(skipped.recommendations).toContain("Document the workflow.");
+		expect(skipped.warnings).toContain(
+			`${namedCriterion.name} needs attention.`,
 		);
+		expect(skipped.warnings.join(" ")).not.toContain(namedCriterion.key);
+		expect(skipped.recommendations).not.toContain("Address N.");
 	});
 
 	it("only skips database and API checks after high-confidence absence", () => {

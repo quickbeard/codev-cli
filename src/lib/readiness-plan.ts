@@ -718,8 +718,9 @@ export function finalizeReadinessOutput(
 			if (decision?.mode !== "semantic") return [id, decision?.result];
 			const agentResult = output.criteria?.[id];
 			if (!agentResult || agentResult.status === "skipped") {
+				const definition = plan.definitions.find((entry) => entry.key === id);
 				warnings.push(
-					`${id} was not judged by the agent and was conservatively scored as failing.`,
+					`${definition?.name || id} was not judged by the agent and was conservatively scored as failing.`,
 				);
 				return [
 					id,
@@ -741,32 +742,34 @@ export function finalizeReadinessOutput(
 			];
 		}),
 	) as Record<string, ReadinessCriterionResult>;
-	const configuredRecommendations = plan.definitions
-		.filter((definition) => criteria[definition.key]?.status === "fail")
-		.toSorted((left, right) => left.priority - right.priority)
-		.map((definition) => definition.recommendationTemplate.trim())
-		.filter(Boolean);
 	const agentRecommendations = Array.isArray(output.recommendations)
-		? output.recommendations
+		? output.recommendations.filter(
+				(recommendation) =>
+					!/^Address\s+[A-Z]\.?$/i.test(recommendation.trim()),
+			)
 		: [];
-	const recommendations = [
-		...new Set([...configuredRecommendations, ...agentRecommendations]),
-	].slice(0, 3);
+	const recommendations = [...new Set(agentRecommendations)].slice(0, 3);
 	return {
 		...output,
 		rubricVersion: plan.analyzerVersion,
 		languages: plan.profile.languages,
 		applications: plan.profile.applications,
 		criteria,
-		warnings: [...new Set(warnings)],
-		recommendations:
-			recommendations.length >= 2
-				? recommendations
-				: [
-						...recommendations,
-						"Address the highest-impact failing readiness criteria.",
-						"Document and automate the repository's development workflow.",
-					].slice(0, 3),
+		warnings: [
+			...new Set(
+				warnings.map((warning) =>
+					plan.definitions.reduce(
+						(message, definition) =>
+							message.replaceAll(
+								definition.key,
+								definition.name || definition.key,
+							),
+						warning,
+					),
+				),
+			),
+		],
+		recommendations,
 		model: typeof output.model === "string" ? output.model : null,
 	};
 }

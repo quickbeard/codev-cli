@@ -39,7 +39,6 @@ function criterion(
 			{ type: "manifest_script", manifest: "package.json", name: "test" },
 		],
 		decision: { engine: "deterministic", match: "any" },
-		recommendationTemplate: "Add tests.",
 		priority: 1,
 		...overrides,
 	};
