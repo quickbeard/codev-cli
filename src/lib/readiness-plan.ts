@@ -707,6 +707,17 @@ export function semanticCriterionIds(plan: ReadinessEvaluationPlan): string[] {
 	);
 }
 
+function replaceCriterionKeys(
+	message: string,
+	definitions: ReadinessCriterionConfig[],
+) {
+	return definitions.reduce(
+		(current, definition) =>
+			current.replaceAll(definition.key, definition.name || definition.key),
+		message,
+	);
+}
+
 export function finalizeReadinessOutput(
 	output: AgentReadinessOutput,
 	plan: ReadinessEvaluationPlan,
@@ -742,13 +753,30 @@ export function finalizeReadinessOutput(
 			];
 		}),
 	) as Record<string, ReadinessCriterionResult>;
-	const agentRecommendations = Array.isArray(output.recommendations)
-		? output.recommendations.filter(
-				(recommendation) =>
-					!/^Address\s+[A-Z]\.?$/i.test(recommendation.trim()),
-			)
-		: [];
-	const recommendations = [...new Set(agentRecommendations)].slice(0, 3);
+	const failedKeys = new Set(
+		plan.criteriaOrder.filter((key) => criteria[key]?.status === "fail"),
+	);
+	const recommendations = [
+		...new Set(
+			(Array.isArray(output.recommendations)
+				? output.recommendations
+				: []
+			).flatMap((recommendation) => {
+				if (
+					typeof recommendation === "string" ||
+					!failedKeys.has(recommendation.criterionKey) ||
+					!recommendation.action.trim()
+				)
+					return [];
+				const definition = plan.definitions.find(
+					(entry) => entry.key === recommendation.criterionKey,
+				);
+				return definition
+					? [`${definition.name}: ${recommendation.action.trim()}`]
+					: [];
+			}),
+		),
+	].slice(0, 3);
 	return {
 		...output,
 		rubricVersion: plan.analyzerVersion,
@@ -758,14 +786,7 @@ export function finalizeReadinessOutput(
 		warnings: [
 			...new Set(
 				warnings.map((warning) =>
-					plan.definitions.reduce(
-						(message, definition) =>
-							message.replaceAll(
-								definition.key,
-								definition.name || definition.key,
-							),
-						warning,
-					),
+					replaceCriterionKeys(warning, plan.definitions),
 				),
 			),
 		],

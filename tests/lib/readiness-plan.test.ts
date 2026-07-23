@@ -271,7 +271,9 @@ describe("readiness evaluation plan", () => {
 		if (!namedCriterion)
 			throw new Error("Expected a criterion with a display name.");
 		skippedInput.warnings = [`${namedCriterion.key} needs attention.`];
-		skippedInput.recommendations = ["Address N.", "Document the workflow."];
+		skippedInput.recommendations = [
+			{ criterionKey: namedCriterion.key, action: "Document the workflow." },
+		];
 		const skipped = finalizeReadinessOutput(skippedInput, plan);
 		const passed = finalizeReadinessOutput(agentOutput("pass"), plan);
 
@@ -284,7 +286,10 @@ describe("readiness evaluation plan", () => {
 		).toBeGreaterThanOrEqual(semanticCount);
 		expect(skipped.languages).toEqual(["TypeScript"]);
 		expect(skipped.applications).toEqual(passed.applications);
-		expect(skipped.recommendations).toContain("Document the workflow.");
+		expect(skipped.recommendations).toContain(
+			`${namedCriterion.name}: Document the workflow.`,
+		);
+		expect(skipped.recommendations.join(" ")).not.toContain(namedCriterion.key);
 		expect(skipped.warnings).toContain(
 			`${namedCriterion.name} needs attention.`,
 		);

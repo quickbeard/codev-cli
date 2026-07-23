@@ -32,13 +32,18 @@ export interface ReadinessApplication {
 	languages: string[];
 }
 
+export interface AgentRecommendation {
+	criterionKey: string;
+	action: string;
+}
+
 export interface AgentReadinessOutput {
 	rubricVersion: string;
 	languages: string[];
 	applications: ReadinessApplication[];
 	criteria: Record<string, ReadinessCriterionResult>;
 	warnings: string[];
-	recommendations: string[];
+	recommendations: Array<string | AgentRecommendation>;
 	model: string | null;
 }
 
@@ -552,6 +557,7 @@ export function validateReadinessOutput(
 export function readinessJsonSchema(
 	criterionIds: string[] = READINESS_CRITERION_IDS,
 	rubricVersion = READINESS_RUBRIC_VERSION,
+	recommendationCriterionIds: string[] = criterionIds,
 ): Record<string, unknown> {
 	const criterionSchema = {
 		type: "object",
@@ -610,7 +616,15 @@ export function readinessJsonSchema(
 				type: "array",
 				minItems: 0,
 				maxItems: 3,
-				items: { type: "string" },
+				items: {
+					type: "object",
+					additionalProperties: false,
+					required: ["criterionKey", "action"],
+					properties: {
+						criterionKey: { enum: recommendationCriterionIds },
+						action: { type: "string", minLength: 1 },
+					},
+				},
 			},
 			model: { type: ["string", "null"] },
 		},

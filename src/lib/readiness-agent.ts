@@ -179,6 +179,8 @@ Finish efficiently. CoDev has already performed a fresh deterministic inventory 
 
 Evaluate every semantic rubric criterion below. Semantic criteria must be pass or fail, never skipped: failure means the repository does not provide enough evidence. Score each criterion once for the repository with denominator 1 and numerator 1 for pass or 0 for fail. Return only semantic criterion IDs in the criteria object; omit fixed decisions because CoDev merges them authoritatively. Evidence entries must be existing repository-relative file or directory paths; file paths may optionally be followed by a line number. Use an empty evidence array when the rationale describes something that is absent. Never cite a nonexistent placeholder, URL, or command as evidence; describe command evidence in the rationale instead.
 
+For each recommendation, return the exact criterion key separately in criterionKey and put only the contextual remediation in action. Recommend only criteria that fail. Do not repeat a criterion key or display name inside action; CoDev resolves the user-facing rule name authoritatively.
+
 Return only the JSON object matching the supplied schema. Do not include aggregate scores.
 
 Rubric version: ${plan?.analyzerVersion ?? READINESS_RUBRIC_VERSION}
@@ -192,7 +194,7 @@ export function openCodeStructuredOutputInstruction(
 	rubricVersion = READINESS_RUBRIC_VERSION,
 ): string {
 	return `Return exactly one JSON object with this shape and no markdown fence:
-{"rubricVersion":"${rubricVersion}","languages":["string"],"applications":[{"path":".","description":"string","languages":["string"]}],"criteria":{"<every semantic rubric id>":{"status":"pass|fail|skipped","numerator":"integer or null","denominator":"positive integer","rationale":"string","evidence":["existing repository-relative path"]}},"warnings":["string"],"recommendations":["0 to 3 contextual actions for failed criteria"],"model":"string or null"}
+{"rubricVersion":"${rubricVersion}","languages":["string"],"applications":[{"path":".","description":"string","languages":["string"]}],"criteria":{"<every semantic rubric id>":{"status":"pass|fail|skipped","numerator":"integer or null","denominator":"positive integer","rationale":"string","evidence":["existing repository-relative path"]}},"warnings":["string"],"recommendations":[{"criterionKey":"failed_criterion_id","action":"contextual action without a criterion label"}],"model":"string or null"}
 	Use null numerator only for skipped criteria. Include every criterion listed in the Semantic rubric exactly once and omit fixed-decision criteria.`;
 }
 
@@ -442,6 +444,7 @@ export async function runReadinessAgent(
 			readinessJsonSchema(
 				plan ? semanticCriterionIds(plan) : undefined,
 				plan?.analyzerVersion,
+				plan?.criteriaOrder,
 			),
 		),
 	);
