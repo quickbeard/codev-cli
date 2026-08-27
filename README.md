@@ -184,14 +184,14 @@ Details worth knowing:
 
 ## Agent readiness
 
-Run `codev readiness` from a Git repository to choose Claude Code, Codex, or
+Run `codevhub readiness` from a Git repository to choose Claude Code, Codex, or
 OpenCode and start a headless, read-only readiness evaluation. CoDev validates
 the agent's evidence against its versioned rubric, computes scores locally,
 rejects scans that change the working tree, and uploads the validated report.
 The report is a local agent evaluation, not a server-verified audit.
 
 Readiness uses each harness's configured default model for Claude Code and
-Codex; `codev readiness --model <model-id>` provides a one-off override for
+Codex; `codevhub readiness --model <model-id>` provides a one-off override for
 those harnesses. OpenCode readiness always uses
 `aigateway/MiniMax/MiniMax-M2.7`. Repair, timeout, and output limits are bounded
 product safeguards rather than user configuration. The selected harness must

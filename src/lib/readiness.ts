@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { type AuthData, ensureInteractiveAuth } from "@/lib/auth.js";
 import { BACKEND_URL } from "@/lib/const.js";
+import { loggedFetch } from "@/lib/log.js";
 import {
 	type AgentRunResult,
 	assertReadinessPrerequisites,
@@ -33,17 +34,19 @@ function repositoryState(root: string): string {
 	return git(["status", "--porcelain=v1", "--untracked-files=all"], root);
 }
 
-function repoUrl(root: string): string {
-	return git(["config", "--get", "remote.origin.url"], root) || root;
+function repoUrl(root: string): string | null {
+	return git(["config", "--get", "remote.origin.url"], root) || null;
 }
 
-function repoName(url: string): string {
+function repoName(url: string | null, root: string): string {
 	return (
 		url
-			.replace(/\.git$/, "")
+			?.replace(/\.git$/, "")
 			.split(/[/:]/)
 			.filter(Boolean)
-			.at(-1) ?? "repository"
+			.at(-1) ??
+		root.split(/[\\/]/).filter(Boolean).at(-1) ??
+		"repository"
 	);
 }
 
@@ -139,18 +142,11 @@ export async function runReadiness(
 				plan,
 			);
 		}
-		run = {
-			...run,
-			output: normalizeReadinessEvidence(
-				finalizeReadinessOutput(run.output, plan),
-				root,
-			),
-		};
 		let totalDurationMs = run.durationMs;
 		let errors = validateReadinessOutput(
 			run.output,
 			root,
-			plan.criteriaOrder,
+			semanticCriterionIds(plan),
 			plan.analyzerVersion,
 		);
 		const { maxRepairs } = readinessRuntimeConfig();
@@ -174,18 +170,11 @@ export async function runReadiness(
 				onProgress,
 				plan,
 			);
-			run = {
-				...run,
-				output: normalizeReadinessEvidence(
-					finalizeReadinessOutput(run.output, plan),
-					root,
-				),
-			};
 			totalDurationMs += run.durationMs;
 			errors = validateReadinessOutput(
 				run.output,
 				root,
-				plan.criteriaOrder,
+				semanticCriterionIds(plan),
 				plan.analyzerVersion,
 			);
 		}
@@ -193,7 +182,24 @@ export async function runReadiness(
 			throw new Error(
 				`Report is still invalid after ${maxRepairs} repair attempt${maxRepairs === 1 ? "" : "s"}:\n${errors.map((error) => `- ${error}`).join("\n")}`,
 			);
-		run = { ...run, durationMs: totalDurationMs };
+		run = {
+			...run,
+			durationMs: totalDurationMs,
+			output: normalizeReadinessEvidence(
+				finalizeReadinessOutput(run.output, plan),
+				root,
+			),
+		};
+		const finalizedErrors = validateReadinessOutput(
+			run.output,
+			root,
+			plan.criteriaOrder,
+			plan.analyzerVersion,
+		);
+		if (finalizedErrors.length > 0)
+			throw new Error(
+				`Finalized report is invalid:\n${finalizedErrors.map((error) => `- ${error}`).join("\n")}`,
+			);
 	} catch (error) {
 		return {
 			exitCode: 1,
@@ -234,7 +240,7 @@ export async function runReadiness(
 	);
 	const payload = {
 		repoUrl: url,
-		repoName: repoName(url),
+		repoName: repoName(url, root),
 		branch: git(["branch", "--show-current"], root),
 		commitHash: git(["rev-parse", "HEAD"], root),
 		rubricVersion: plan.analyzerVersion,
@@ -270,39 +276,36 @@ export async function runReadiness(
 	};
 
 	onProgress(`Uploading validated Level ${summary.level} report`);
-	let authError = "";
 	let auth: AuthData;
 	try {
 		auth =
 			options.auth ??
-			(await ensureInteractiveAuth(
-				(message) => {
-					authError = message;
-					onProgress(message);
-				},
-				{
-					onLoginUrl: options.onLoginUrl,
-					onManualSubmit: options.onManualSubmit,
-					onLoginDone: options.onLoginDone,
-				},
-			));
+			(await ensureInteractiveAuth(onProgress, {
+				onLoginUrl: options.onLoginUrl,
+				onManualSubmit: options.onManualSubmit,
+				onLoginDone: options.onLoginDone,
+			}));
 	} catch (error) {
 		return {
 			exitCode: 1,
-			message:
-				authError || (error instanceof Error ? error.message : String(error)),
+			message: error instanceof Error ? error.message : String(error),
 		};
 	}
 	let response: Response;
 	try {
-		response = await fetch(`${BACKEND_URL}/readiness/reports`, {
-			method: "POST",
-			headers: {
-				"content-type": "application/json",
-				authorization: `Bearer ${auth.access_token}`,
+		response = await loggedFetch(
+			"readiness.report",
+			`${BACKEND_URL}/readiness/reports`,
+			{
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					authorization: `Bearer ${auth.access_token}`,
+				},
+				body: JSON.stringify(payload),
+				signal: AbortSignal.timeout(10_000),
 			},
-			body: JSON.stringify(payload),
-		});
+		);
 	} catch (error) {
 		return {
 			exitCode: 1,

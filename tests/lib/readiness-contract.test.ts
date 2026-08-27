@@ -231,7 +231,7 @@ describe("readiness contract", () => {
 			{
 				...process.env,
 				PATH: [
-					join(homedir(), ".codev", "bin"),
+					join(homedir(), ".codev-hub", "bin"),
 					"/opt/homebrew/bin",
 					"/usr/bin",
 				].join(delimiter),
@@ -258,7 +258,7 @@ describe("readiness contract", () => {
 			.mockReturnValue(["claude-code"]);
 		try {
 			expect(() => assertReadinessPrerequisites("opencode")).toThrow(
-				/codev install/,
+				/codevhub install/,
 			);
 			expect(() => assertReadinessPrerequisites("claude")).not.toThrow();
 			// Codex may use its own ChatGPT subscription authentication without a
@@ -305,7 +305,7 @@ describe("readiness contract", () => {
 					error: "authentication_failed",
 				}),
 			),
-		).toContain("codev login");
+		).toContain("codevhub login");
 	});
 
 	it("extracts structured results from Claude, Codex, and OpenCode envelopes", () => {

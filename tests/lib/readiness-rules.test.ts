@@ -108,6 +108,20 @@ describe("declarative readiness rules", () => {
 		);
 	});
 
+	it.each([
+		"(a|a)*$",
+		"(?:a|a)*$",
+		"(x|xx)+y",
+	])("rejects ambiguous alternation regex %s", (pattern) => {
+		const inventory = repository({ "src/a.ts": "a".repeat(40) });
+		const configured = criterion({
+			evidenceLocators: [{ type: "text_matches", path: "src/**", pattern }],
+		});
+		expect(() => evaluateConfiguredCriterion(configured, inventory)).toThrow(
+			"unsupported constructs",
+		);
+	});
+
 	it("passes an absence check when prohibited evidence is missing", () => {
 		const inventory = repository({ README: "notes" });
 		const configured = criterion({

@@ -22,8 +22,8 @@ import {
 } from "@/lib/analysis-backend.js";
 import {
 	type AuthData,
-	ensureInteractiveAuth,
 	loadAuth,
+	login,
 	refreshCodevConfig,
 } from "@/lib/auth.js";
 import { fetchAnalysisBackendSession } from "@/lib/backend.js";
@@ -305,14 +305,20 @@ async function ensureAuth(
 ) {
 	const auth = loadAuth();
 	if (auth) return auth;
-	const fresh = await ensureInteractiveAuth(onStatus, {
-		onLoginUrl,
-		onManualSubmit,
-		onLoginDone,
+	const fresh = await login(onStatus, (openBrowser, url, submitManualCode) => {
+		// Hand the URL to the interactive app when possible; other callers receive
+		// the manual fallback through their status channel.
+		if (onLoginUrl) onLoginUrl(url);
+		else
+			onStatus(`If your browser didn't open, visit this URL manually: ${url}`);
+		// The upload daemon deliberately does not wire this because it has no TTY.
+		onManualSubmit?.(submitManualCode);
+		openBrowser();
 	});
 	// Login finished (loopback browser callback or manual paste). Signal the
 	// caller to dismiss the login URL + paste-back prompt before the upload
 	// continues, so they don't linger on screen.
+	onLoginDone?.();
 	// login() no longer refreshes CoDev config on its own — every caller does
 	// it explicitly so the timing fits each flow. On a fresh
 	// login we don't have a cache yet, so populating it here avoids burning

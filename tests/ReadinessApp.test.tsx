@@ -1,7 +1,7 @@
-import { render } from "ink-testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { bundledStandardProfile } from "@/lib/readiness-profile.js";
 import { ReadinessApp } from "@/ReadinessApp.js";
+import { lastNonEmptyFrame, renderWithoutRawMode } from "./helpers/raw-mode.js";
 
 async function settle(ms = 30) {
 	await new Promise((resolve) => setTimeout(resolve, ms));
@@ -18,7 +18,7 @@ describe("ReadinessApp", () => {
 			progress?.("Validating report");
 			return { exitCode: 0, message: "Stored report report-1" };
 		});
-		const { frames } = render(
+		const { frames } = renderWithoutRawMode(
 			<ReadinessApp
 				available={{ claude: false, codex: false, opencode: true }}
 				run={run}
@@ -43,7 +43,7 @@ describe("ReadinessApp", () => {
 	});
 
 	it("explains when no supported agent is installed", async () => {
-		const { lastFrame } = render(
+		const { lastFrame } = renderWithoutRawMode(
 			<ReadinessApp
 				available={{ claude: false, codex: false, opencode: false }}
 				run={vi.fn()}
@@ -58,7 +58,7 @@ describe("ReadinessApp", () => {
 		const loadError = new Error(
 			"Readiness profile fetch failed (503): unavailable",
 		);
-		const { frames } = render(
+		const { frames } = renderWithoutRawMode(
 			<ReadinessApp
 				available={{ claude: true, codex: true, opencode: true }}
 				run={vi.fn()}
@@ -69,7 +69,7 @@ describe("ReadinessApp", () => {
 		);
 
 		await settle(100);
-		const output = frames.join("\n");
+		const output = lastNonEmptyFrame(frames);
 		expect(output).toContain(loadError.message);
 		expect(output).not.toContain("Choose coding agent");
 	});

@@ -1,6 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { basename, dirname, extname } from "node:path";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import {
+	basename,
+	dirname,
+	extname,
+	isAbsolute,
+	join,
+	relative,
+	resolve,
+} from "node:path";
 import {
 	type AgentReadinessOutput,
 	READINESS_CRITERION_IDS,
@@ -112,7 +120,10 @@ function listedFiles(root: string, args: string[]): string[] {
 		encoding: "utf8",
 		maxBuffer: 20 * 1024 * 1024,
 	});
-	if (result.status !== 0) return [];
+	if (result.status !== 0)
+		throw new Error(
+			`Could not inventory repository files: ${result.error?.message || result.stderr.trim() || `git ls-files exited with ${result.status}`}`,
+		);
 	return result.stdout
 		.split("\0")
 		.map((file) => file.replace(/^\.\//, ""))
@@ -122,7 +133,15 @@ function listedFiles(root: string, args: string[]): string[] {
 
 function safeText(root: string, file: string): string {
 	try {
-		const content = readFileSync(`${root}/${file}`);
+		const target = resolve(root, file);
+		const rel = relative(realpathSync(root), realpathSync(target));
+		if (
+			lstatSync(target).isSymbolicLink() ||
+			isAbsolute(rel) ||
+			rel.startsWith("..")
+		)
+			return "";
+		const content = readFileSync(join(root, file));
 		if (content.byteLength > 256_000 || content.includes(0)) return "";
 		return content.toString("utf8");
 	} catch {
@@ -691,7 +710,7 @@ export function buildReadinessEvaluationPlan(
 		profile: {
 			...repositoryProfile,
 			relevantFiles: [
-				...new Set([...repositoryProfile.relevantFiles, ...discoveredEvidence]),
+				...new Set([...discoveredEvidence, ...repositoryProfile.relevantFiles]),
 			].slice(0, 800),
 		},
 		criteria: selectedCriteria,
@@ -711,11 +730,13 @@ function replaceCriterionKeys(
 	message: string,
 	definitions: ReadinessCriterionConfig[],
 ) {
-	return definitions.reduce(
-		(current, definition) =>
-			current.replaceAll(definition.key, definition.name || definition.key),
-		message,
-	);
+	return [...definitions]
+		.sort((left, right) => right.key.length - left.key.length)
+		.reduce(
+			(current, definition) =>
+				current.replaceAll(definition.key, definition.name || definition.key),
+			message,
+		);
 }
 
 export function finalizeReadinessOutput(

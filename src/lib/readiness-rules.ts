@@ -1,5 +1,6 @@
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
+import safeRegexPattern from "safe-regex2";
 import type { ReadinessCriterionResult } from "@/lib/readiness-contract.js";
 import type {
 	ReadinessCriterionConfig,
@@ -115,7 +116,11 @@ function safeRegex(pattern: string, flags: string): RegExp {
 		throw new Error("Readiness rule flags are invalid.");
 	// Reject constructs that are unnecessary for configuration matching and are
 	// common sources of catastrophic backtracking or surprising cross-file logic.
-	if (/\\[1-9]|\(\?[=!<]|\([^)]*[+*][^)]*\)[+*{]/.test(pattern))
+	if (
+		/\\[1-9]|\(\?[=!<]/.test(pattern) ||
+		/\((?:\?:)?[^()]*(?:\|)[^()]*\)[+*{]/.test(pattern) ||
+		!safeRegexPattern(pattern, { limit: 20 })
+	)
 		throw new Error("Readiness rule regex uses unsupported constructs.");
 	return new RegExp(pattern, flags);
 }

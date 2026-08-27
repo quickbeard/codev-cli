@@ -1,5 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import { useState } from "react";
+import { useCanType } from "@/components/useCanType.js";
 import {
 	READINESS_AGENTS,
 	type ReadinessAgent,
@@ -29,6 +30,7 @@ export function ReadinessAgentSelect({
 		READINESS_AGENTS.findIndex((agent) => available[agent]),
 	);
 	const [cursor, setCursor] = useState(firstAvailable);
+	const canType = useCanType();
 
 	useInput(
 		(_input, key) => {
@@ -49,7 +51,7 @@ export function ReadinessAgentSelect({
 				if (choice && available[choice]) onSelect(choice);
 			}
 		},
-		{ isActive: !readOnly },
+		{ isActive: canType && !readOnly },
 	);
 
 	return (

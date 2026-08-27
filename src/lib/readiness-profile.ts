@@ -189,14 +189,10 @@ export async function fetchReadinessProfiles(
 	onStatus: (message: string) => void = () => {},
 	callbacks: ReadinessLoginCallbacks = {},
 ): Promise<ReadinessProfileSession> {
-	let authError = "";
 	const auth = await ensureInteractiveAuth((message) => {
-		authError = message;
 		onStatus(message);
 	}, callbacks).catch((error) => {
-		throw new Error(
-			authError || (error instanceof Error ? error.message : String(error)),
-		);
+		throw new Error(error instanceof Error ? error.message : String(error));
 	});
 	onStatus("Loading accessible readiness profiles");
 	const response = await loggedFetch(

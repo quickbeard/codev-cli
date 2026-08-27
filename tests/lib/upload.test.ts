@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { MockInstance } from "vitest";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import * as auth from "@/lib/auth.js";
 import {
 	fileSha256,
 	filterNewFiles,
@@ -136,11 +137,9 @@ describe("upload helpers", () => {
 describe("runUpload", () => {
 	test("signals onLoginDone after a fresh login completes", async () => {
 		// auth.json has analysis backend coords but no SSO session, so loadAuth() returns
-		// null and ensureAuth() must log in. Use the development bypass so the
-		// shared interactive-auth helper resolves immediately without a browser,
-		// then assert onLoginDone fired so the caller can dismiss
+		// null and ensureAuth() must log in. Mock login() to resolve immediately
+		// (no browser), then assert onLoginDone fired so the caller can dismiss
 		// the login prompt before the upload proceeds.
-		vi.stubEnv("CODEV_BYPASS_LOGIN", "1");
 		mkdirSync(join(tempHome, ".codev-hub"), { recursive: true });
 		writeFileSync(
 			join(tempHome, ".codev-hub", "auth.json"),
@@ -151,6 +150,12 @@ describe("runUpload", () => {
 		);
 		writeLog("fresh.md", "hello");
 
+		const loginSpy = vi.spyOn(auth, "login").mockResolvedValue({
+			access_token: "token",
+			id_token: "token",
+			expires_at: Date.now() + 3600000,
+			user: { sub: "u", email: "u@example.com", displayName: "User" },
+		});
 		const onLoginDone = vi.fn();
 		const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (
 			input: string | URL | Request,
@@ -204,10 +209,12 @@ describe("runUpload", () => {
 
 		try {
 			const summary = await runUpload({ onLoginDone });
+			expect(loginSpy).toHaveBeenCalledTimes(1);
 			expect(onLoginDone).toHaveBeenCalledTimes(1);
 			expect(summary.uploaded).toBe(1);
 		} finally {
 			fetchSpy.mockRestore();
+			loginSpy.mockRestore();
 		}
 	});
 

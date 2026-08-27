@@ -1,5 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import { useState } from "react";
+import { useCanType } from "@/components/useCanType.js";
 import type { ReadinessProfile } from "@/lib/readiness-profile.js";
 
 interface ReadinessProfileSelectProps {
@@ -16,6 +17,7 @@ export function ReadinessProfileSelect({
 	onSelect,
 }: ReadinessProfileSelectProps) {
 	const [cursor, setCursor] = useState(0);
+	const canType = useCanType();
 	useInput(
 		(_input, key) => {
 			if (key.upArrow || key.downArrow) {
@@ -29,7 +31,7 @@ export function ReadinessProfileSelect({
 				if (choice) onSelect(choice);
 			}
 		},
-		{ isActive: !readOnly && profiles.length > 0 },
+		{ isActive: canType && !readOnly && profiles.length > 0 },
 	);
 	return (
 		<Box flexDirection="column">

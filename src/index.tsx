@@ -350,6 +350,34 @@ switch (command) {
 		process.exit(runLogs(args));
 		break;
 	}
+	case "readiness": {
+		requireInteractiveTerminal("readiness");
+		let readiness: ReadinessCliOptions;
+		try {
+			readiness = parseReadinessArgs(args);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
+			console.error(
+				"Usage: codevhub readiness [--profile <id-or-slug>] [--agent <claude|codex|opencode>] [--model <model-id>]",
+			);
+			process.exit(1);
+			break;
+		}
+		const { waitUntilExit } = render(
+			<ReadinessApp
+				options={{ model: readiness.model }}
+				profileSelector={readiness.profile}
+				requestedAgent={readiness.agent}
+			/>,
+		);
+		try {
+			await waitUntilExit();
+			process.exit(0);
+		} catch {
+			process.exit(1);
+		}
+		break;
+	}
 	// `--force` is a deliberate escape hatch and is deliberately absent from
 	// `help.ts`: it deletes a backup-less live config whoever wrote it, skipping
 	// the authorship check that normally preserves the user's own files. It never
@@ -562,33 +590,6 @@ switch (command) {
 	// (cliLogsDir) and the conversation exports (agentLogsDir).
 	case "clear-logs": {
 		process.exit(runClearLogs());
-		break;
-	}
-	case "readiness": {
-		let readiness: ReadinessCliOptions;
-		try {
-			readiness = parseReadinessArgs(args);
-		} catch (error) {
-			console.error(error instanceof Error ? error.message : String(error));
-			console.error(
-				"Usage: codevhub readiness [--profile <id-or-slug>] [--agent <claude|codex|opencode>] [--model <model-id>]",
-			);
-			process.exit(1);
-			break;
-		}
-		const { waitUntilExit } = render(
-			<ReadinessApp
-				options={{ model: readiness.model }}
-				profileSelector={readiness.profile}
-				requestedAgent={readiness.agent}
-			/>,
-		);
-		try {
-			await waitUntilExit();
-			process.exit(0);
-		} catch {
-			process.exit(1);
-		}
 		break;
 	}
 	// Every command not claimed by the hub above belongs to CoDev Code:

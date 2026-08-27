@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { type ApiKeyCreds, loadApiKey } from "@/lib/auth.js";
 import { detectConfiguredTools } from "@/lib/configure.js";
 import { AI_GATEWAY_OPENAI_URL } from "@/lib/const.js";
+import { logError, logInfo } from "@/lib/log.js";
 import { readinessRuntimeConfig } from "@/lib/readiness-config.js";
 import {
 	type AgentReadinessOutput,
@@ -29,6 +30,9 @@ export const READINESS_AGENTS = ["claude", "codex", "opencode"] as const;
 export type ReadinessAgent = (typeof READINESS_AGENTS)[number];
 
 export function isReadinessAgentAvailable(agent: ReadinessAgent): boolean {
+	// Codex can use its own configured default model/account, so a standalone
+	// executable is sufficient. Claude and OpenCode currently rely on CoDev-owned
+	// gateway configuration and must appear in detectConfiguredTools().
 	if (agent === "codex" && isAgentAvailable(agent)) return true;
 	const tool = agent === "claude" ? "claude-code" : agent;
 	return detectConfiguredTools().includes(tool);
@@ -37,7 +41,7 @@ export function isReadinessAgentAvailable(agent: ReadinessAgent): boolean {
 export function assertReadinessPrerequisites(agent: ReadinessAgent): void {
 	if (isReadinessAgentAvailable(agent)) return;
 	throw new Error(
-		`${agent === "claude" ? "Claude Code" : agent === "codex" ? "Codex" : "OpenCode"} is not configured by CoDev. Run \`codev install\`, select this agent, and retry the readiness scan.`,
+		`${agent === "claude" ? "Claude Code" : agent === "codex" ? "Codex" : "OpenCode"} is not configured by CoDev. Run \`codevhub install\`, select this agent, and retry the readiness scan.`,
 	);
 }
 
@@ -94,7 +98,7 @@ export function providerFailureFromLine(line: string): string | undefined {
 			event.subtype === "api_retry" &&
 			event.error === "authentication_failed"
 		)
-			return "Agent authentication failed. Run `codev login`, then `codev config` to refresh the selected harness credentials.";
+			return "Agent authentication failed. Run `codevhub login`, then `codevhub config` to refresh the selected harness credentials.";
 	} catch {}
 	return undefined;
 }
@@ -300,6 +304,10 @@ function runProcess(
 			env: readinessProcessEnv(envOverrides),
 			stdio: ["ignore", "pipe", "pipe"],
 		});
+		logInfo(`launching readiness agent ${command}`, {
+			action: "process.spawn",
+			extra: { argsCount: args.length },
+		});
 		let out = "";
 		let err = "";
 		let size = 0;
@@ -341,9 +349,21 @@ function runProcess(
 		};
 		child.stdout.on("data", (chunk: Buffer) => append("out", chunk));
 		child.stderr.on("data", (chunk: Buffer) => append("err", chunk));
-		child.once("error", reject);
+		child.once("error", (error) => {
+			clearTimeout(timer);
+			logError(`failed to launch readiness agent ${command}`, {
+				action: "process.exit",
+				err: error,
+				extra: { argsCount: args.length },
+			});
+			reject(error);
+		});
 		child.once("exit", (code) => {
 			clearTimeout(timer);
+			logInfo(`readiness agent ${command} exited`, {
+				action: "process.exit",
+				extra: { argsCount: args.length, exitCode: code },
+			});
 			if (providerFailure) reject(new Error(providerFailure));
 			else if (timedOut)
 				reject(new Error(`Agent timed out after ${effectiveTimeoutMs} ms.`));
@@ -454,7 +474,7 @@ export async function runReadinessAgent(
 		const credentials = loadApiKey();
 		if (!credentials?.apiKey)
 			throw new Error(
-				"OpenCode readiness requires gateway credentials. Run `codev install` first.",
+				"OpenCode readiness requires gateway credentials. Run `codevhub install` first.",
 			);
 		const configDir = join(temp, "config", "opencode");
 		mkdirSync(configDir, { recursive: true });
