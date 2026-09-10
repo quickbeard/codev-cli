@@ -26,6 +26,9 @@ interface ConfigResponse {
 
 interface ErrorResponse {
 	error?: string;
+	// Machine-readable reason the backend attaches to some failures — see
+	// BackendError below.
+	code?: string;
 }
 
 const VALIDATE_TIMEOUT_MS = 5_000;
@@ -48,6 +51,31 @@ export interface AnalysisBackendSession {
 	};
 }
 
+// A non-2xx from the CoDev backend. Beyond the message every caller already
+// prints, it keeps the backend's own `error` text (`reason`) and, when the
+// backend sends one, its machine-readable `code` — so a component can branch
+// on *what kind* of failure this was without pattern-matching prose.
+export class BackendError extends Error {
+	constructor(
+		message: string,
+		public status: number,
+		public reason: string,
+		public code?: string,
+	) {
+		super(message);
+		this.name = "BackendError";
+	}
+}
+
+// The gateway looked at this user and declined to issue a key — today, an
+// email domain outside its allowlist. The backend answers 403 with
+// `code: "key_refused"`. Nothing the user can do on this machine changes the
+// answer: retrying is pointless, and the way forward is a key issued by hand
+// (the manual-credentials path) or a fix on the gateway side.
+export function isKeyRefusal(err: unknown): err is BackendError {
+	return err instanceof BackendError && err.code === "key_refused";
+}
+
 export async function fetchApiKey(accessToken: string): Promise<string> {
 	const res = await loggedFetch(
 		"backend.auth-exchange",
@@ -62,7 +90,12 @@ export async function fetchApiKey(accessToken: string): Promise<string> {
 	if (!res.ok) {
 		const body = (await res.json().catch(() => ({}))) as ErrorResponse;
 		const reason = body.error || res.statusText;
-		throw new Error(`Backend /auth/exchange failed (${res.status}): ${reason}`);
+		throw new BackendError(
+			`Backend /auth/exchange failed (${res.status}): ${reason}`,
+			res.status,
+			reason,
+			body.code,
+		);
 	}
 
 	const data = (await res.json()) as ExchangeResponse;

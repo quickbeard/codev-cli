@@ -702,6 +702,63 @@ describe("InstallApp fail-stop invariant", () => {
 		});
 	});
 
+	test("a gateway key refusal drops into manual creds and reaches the done screen", async () => {
+		stubExecFile(() => ({ stdout: "ok" }));
+		stubModels();
+		vi.spyOn(auth, "login").mockResolvedValue(fakeAuth());
+		const fetchApiKeySpy = vi
+			.spyOn(backend, "fetchApiKey")
+			.mockRejectedValue(
+				new backend.BackendError(
+					"Backend /auth/exchange failed (403): The gateway declined to issue a key for test@os.example.com: Only @example.com emails are supported",
+					403,
+					"The gateway declined to issue a key for test@os.example.com: Only @example.com emails are supported",
+					"key_refused",
+				),
+			);
+		const configureSpy = vi
+			.spyOn(configure, "configureClaudeCode")
+			.mockReturnValue([
+				{
+					kind: "claude-settings",
+					sourcePath: "/tmp/x",
+					backupPath: "/tmp/x.b",
+					created: true,
+				},
+			]);
+
+		const { stdin, frames } = render(<InstallApp />);
+		await advanceThroughConfirm(stdin, frames);
+		await pickNewKey(stdin, frames);
+
+		await waitForFrame(frames, "Only @example.com emails are supported");
+		expect(allFrames(frames)).toContain(
+			"Press Enter to enter your own API key",
+		);
+		expect(allFrames(frames)).not.toContain("Press Enter to retry");
+
+		stdin.write("\r");
+		await typeManualCreds(
+			stdin,
+			frames,
+			"https://byhand.example.com/v1",
+			"sk-byhand-123",
+		);
+		await pickFirstModel(stdin, frames);
+		await waitForFrame(frames, "Happy coding");
+
+		expect(allFrames(frames)).toContain("Happy coding");
+		expect(fetchApiKeySpy).toHaveBeenCalledTimes(1);
+		expect(configureSpy).toHaveBeenCalledTimes(1);
+		expect(configureSpy).toHaveBeenCalledWith(
+			expect.objectContaining({
+				apiKey: "sk-byhand-123",
+				baseUrl: "https://byhand.example.com/v1",
+				model: "m-alpha",
+			}),
+		);
+	});
+
 	test("fetch-key retry after failure reaches the done screen", async () => {
 		stubExecFile(() => ({ stdout: "ok" }));
 		stubModels();

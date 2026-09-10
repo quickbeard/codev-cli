@@ -3,12 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
+	BackendError,
 	fetchAnalysisBackendSession,
 	fetchApiKey,
 	fetchCodevConfig,
 	fetchModels,
 	fetchModelWindows,
 	isInvalidKeyError,
+	isKeyRefusal,
 	smokeTestModel,
 	validateApiKey,
 } from "@/lib/backend.js";
@@ -86,6 +88,33 @@ describe("fetchApiKey", () => {
 		await expect(fetchApiKey("token")).rejects.toThrow(
 			"Backend /auth/exchange failed (502): upstream timeout",
 		);
+	});
+
+	test("a 403 key_refused surfaces as a BackendError carrying the code and reason", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			jsonResponse(403, {
+				error:
+					"The gateway declined to issue a key for u@os.example.com: Only @example.com emails are supported",
+				code: "key_refused",
+			}),
+		);
+		let caught: unknown;
+		try {
+			await fetchApiKey("token");
+		} catch (err) {
+			caught = err;
+		}
+		expect(caught).toBeInstanceOf(BackendError);
+		const err = caught as BackendError;
+		expect(err.status).toBe(403);
+		expect(err.code).toBe("key_refused");
+		expect(err.reason).toBe(
+			"The gateway declined to issue a key for u@os.example.com: Only @example.com emails are supported",
+		);
+		expect(isKeyRefusal(err)).toBe(true);
+		// A plain 502 is a BackendError too, just not a refusal.
+		expect(isKeyRefusal(new BackendError("x", 502, "x"))).toBe(false);
+		expect(isKeyRefusal(new Error("x"))).toBe(false);
 	});
 
 	test("throws on a non-2xx response with no JSON body, using statusText", async () => {

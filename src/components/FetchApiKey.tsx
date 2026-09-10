@@ -2,7 +2,7 @@ import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import { useEffect, useState } from "react";
 import type { AuthData } from "@/lib/auth.js";
-import { fetchApiKey } from "@/lib/backend.js";
+import { fetchApiKey, isKeyRefusal } from "@/lib/backend.js";
 import { BACKEND_URL } from "@/lib/const.js";
 import { describeFailure } from "@/lib/doctor.js";
 
@@ -20,8 +20,19 @@ interface FetchApiKeyProps {
 export function FetchApiKey({ auth, onDone, onFallback }: FetchApiKeyProps) {
 	const [pending, setPending] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	// The gateway declined this user outright (backend `key_refused`). Held
+	// apart from `error` because it gets no retry affordance: the answer will
+	// not change, and "Press Enter to retry" under it sent users looping on a
+	// failure only the gateway team can fix.
+	const [refused, setRefused] = useState<string | null>(null);
 	const [emptyCount, setEmptyCount] = useState(0);
 	const [succeeded, setSucceeded] = useState(false);
+	// Set once this component has handed the flow to the manual-credentials
+	// step. Together with `succeeded` it switches the key listener off: the
+	// parent keeps this Step mounted as read-only history, and a listener left
+	// live here would keep answering every later Enter (model pick, smoke-test
+	// spinner) by calling onFallback again and yanking the wizard backwards.
+	const [handedOff, setHandedOff] = useState(false);
 	const [attempt, setAttempt] = useState(0);
 
 	// `attempt` is the retry trigger — bumping it re-runs the effect.
@@ -42,6 +53,13 @@ export function FetchApiKey({ auth, onDone, onFallback }: FetchApiKeyProps) {
 			})
 			.catch((err: Error) => {
 				setPending(false);
+				if (isKeyRefusal(err)) {
+					// The backend's `reason` is the gateway's own sentence (which
+					// domains it accepts); the surrounding "Backend … failed (403)"
+					// wrapper is noise to the person reading it.
+					setRefused(err.reason);
+					return;
+				}
 				// A transport failure here (proxy/TLS/DNS) gets the full diagnosis;
 				// a backend HTTP error keeps its own already-precise message.
 				setError(
@@ -53,21 +71,33 @@ export function FetchApiKey({ auth, onDone, onFallback }: FetchApiKeyProps) {
 			});
 	}, [auth.access_token, onDone, attempt]);
 
-	useInput((_input, key) => {
-		if (pending) return;
-		if (!key.return) return;
-		if (error) {
-			setAttempt((n) => n + 1);
-			return;
-		}
-		if (emptyCount === 1) {
-			setAttempt((n) => n + 1);
-			return;
-		}
-		if (emptyCount >= 2) {
-			onFallback();
-		}
-	});
+	const fallBack = () => {
+		setHandedOff(true);
+		onFallback();
+	};
+
+	useInput(
+		(_input, key) => {
+			if (pending) return;
+			if (!key.return) return;
+			if (refused) {
+				fallBack();
+				return;
+			}
+			if (error) {
+				setAttempt((n) => n + 1);
+				return;
+			}
+			if (emptyCount === 1) {
+				setAttempt((n) => n + 1);
+				return;
+			}
+			if (emptyCount >= 2) {
+				fallBack();
+			}
+		},
+		{ isActive: !succeeded && !handedOff },
+	);
 
 	return (
 		<Box flexDirection="column">
@@ -81,6 +111,21 @@ export function FetchApiKey({ auth, onDone, onFallback }: FetchApiKeyProps) {
 			)}
 			{succeeded && (
 				<Text color="green">{"✓ API key obtained successfully."}</Text>
+			)}
+			{refused && (
+				<>
+					<Text color="red">{`✗ ${refused}`}</Text>
+					<Text dimColor>
+						{
+							"Retrying won't change this — ask the gateway team to enable your account, or use an API key issued to you by hand."
+						}
+					</Text>
+					{!handedOff && (
+						<Text dimColor>
+							{"Press Enter to enter your own API key, Ctrl-C to quit"}
+						</Text>
+					)}
+				</>
 			)}
 			{error && (
 				<>
@@ -109,9 +154,11 @@ export function FetchApiKey({ auth, onDone, onFallback }: FetchApiKeyProps) {
 					<Text color="yellow">
 						{"Gateway returned an empty API key again."}
 					</Text>
-					<Text dimColor>
-						{"Press Enter to enter credentials manually, Ctrl-C to quit"}
-					</Text>
+					{!handedOff && (
+						<Text dimColor>
+							{"Press Enter to enter credentials manually, Ctrl-C to quit"}
+						</Text>
+					)}
 				</>
 			)}
 		</Box>

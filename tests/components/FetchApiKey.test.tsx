@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { FetchApiKey } from "@/components/FetchApiKey.js";
 import type * as auth from "@/lib/auth.js";
 import * as backend from "@/lib/backend.js";
+import { BackendError } from "@/lib/backend.js";
 
 afterEach(() => {
 	cleanup();
@@ -118,6 +119,75 @@ describe("FetchApiKey", () => {
 
 		expect(onFallback).toHaveBeenCalledTimes(1);
 		expect(onDone).not.toHaveBeenCalled();
+	});
+
+	test("a gateway refusal shows the reason with no retry hint; Enter hands off to manual entry", async () => {
+		const fetchSpy = vi
+			.spyOn(backend, "fetchApiKey")
+			.mockRejectedValue(
+				new BackendError(
+					"Backend /auth/exchange failed (403): The gateway declined to issue a key for u@os.example.com: Only @example.com emails are supported",
+					403,
+					"The gateway declined to issue a key for u@os.example.com: Only @example.com emails are supported",
+					"key_refused",
+				),
+			);
+		// This file never restores mocks, so the spy carries every earlier
+		// test's calls; clear before counting.
+		fetchSpy.mockClear();
+
+		const onDone = vi.fn();
+		const onFallback = vi.fn();
+		const { stdin, lastFrame } = render(
+			<FetchApiKey auth={fakeAuth()} onDone={onDone} onFallback={onFallback} />,
+		);
+
+		await new Promise((r) => setTimeout(r, 100));
+		const output = lastFrame() ?? "";
+		expect(output).toContain(
+			"The gateway declined to issue a key for u@os.example.com: Only @example.com emails are supported",
+		);
+		// The user reads the gateway's sentence, not the HTTP wrapper around it.
+		expect(output).not.toContain("Backend /auth/exchange failed");
+		expect(output).toContain("Retrying won't change this");
+		expect(output).toContain("Press Enter to enter your own API key");
+		expect(output).not.toContain("Press Enter to retry");
+
+		stdin.write("\r");
+		await new Promise((r) => setTimeout(r, 100));
+		expect(onFallback).toHaveBeenCalledTimes(1);
+		expect(onDone).not.toHaveBeenCalled();
+		// Enter must not have re-fetched: the refusal is not retryable.
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+	});
+
+	test("stops listening once it has handed off, so later Enters don't re-fire onFallback", async () => {
+		vi.spyOn(backend, "fetchApiKey").mockResolvedValue("");
+
+		const onDone = vi.fn();
+		const onFallback = vi.fn();
+		const { stdin, lastFrame } = render(
+			<FetchApiKey auth={fakeAuth()} onDone={onDone} onFallback={onFallback} />,
+		);
+
+		await new Promise((r) => setTimeout(r, 100));
+		stdin.write("\r"); // first empty -> retry
+		await new Promise((r) => setTimeout(r, 100));
+		stdin.write("\r"); // second empty -> fallback
+		await new Promise((r) => setTimeout(r, 100));
+		expect(onFallback).toHaveBeenCalledTimes(1);
+
+		// The parent keeps this Step mounted as history while the next step
+		// (manual creds, model pick, smoke test) owns the keyboard. Every Enter
+		// the user presses there used to land here too.
+		stdin.write("\r");
+		stdin.write("\r");
+		await new Promise((r) => setTimeout(r, 100));
+		expect(onFallback).toHaveBeenCalledTimes(1);
+		// And the prompt that invited the Enter is gone from the history frame.
+		expect(lastFrame() ?? "").not.toContain(
+			"Press Enter to enter credentials manually",
+		);
 	});
 
 	test("shows error and retry prompt on fetchApiKey rejection", async () => {
