@@ -311,7 +311,8 @@ describe("configureClaudeCode", () => {
 		expect(read().CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("200000");
 		expect(read().CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe("80");
 
-		configureClaudeCode({ apiKey: "sk", model: "zai-org/GLM-4.7-cc" });
+		// And a model on the 200K default lands on the same two numbers.
+		configureClaudeCode({ apiKey: "sk", model: "other/model" });
 		expect(read().CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("200000");
 		expect(read().CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe("80");
 	});
@@ -459,7 +460,7 @@ describe("configureOpenCode", () => {
 		configureOpenCode({
 			apiKey: "sk-xyz",
 			model: "MiniMax/MiniMax-M3",
-			models: ["MiniMax/MiniMax-M3", "zai-org/GLM-4.7-cc"],
+			models: ["MiniMax/MiniMax-M3", "other/model"],
 		});
 
 		const filePath = join(tempDir, ".config", "opencode", "opencode.json");
@@ -469,13 +470,13 @@ describe("configureOpenCode", () => {
 
 		// True windows, so the TUI's "% context used" gauge stays honest.
 		expect(map["MiniMax/MiniMax-M3"].limit.context).toBe(262144);
-		expect(map["zai-org/GLM-4.7-cc"].limit.context).toBe(200000);
+		expect(map["other/model"].limit.context).toBe(200000);
 		// ...and each fires where it should, off one shared reserve. Both
 		// models' 90% target + reserve exceeds their window, so declaredInput's
 		// clamp pins input at the window — triggers stay per-model and never
 		// past the ceiling.
 		expect(map["MiniMax/MiniMax-M3"].limit.input - reserved).toBe(222144);
-		expect(map["zai-org/GLM-4.7-cc"].limit.input - reserved).toBe(160000);
+		expect(map["other/model"].limit.input - reserved).toBe(160000);
 	});
 
 	test("writes every fetched model into the provider's models map", async () => {
@@ -962,7 +963,12 @@ describe("configureCodex", () => {
 		expect(readCodexToml().model_context_window).toBe(262144);
 		expect(readCodexToml().model_auto_compact_token_limit).toBe(235930);
 
-		configureCodex({ apiKey: "sk-codex", model: "zai-org/GLM-4.7-cc" });
+		configureCodex({ apiKey: "sk-codex", model: "zai-org/GLM-5.3-Flash" });
+		expect(readCodexToml().model_context_window).toBe(262144);
+		expect(readCodexToml().model_auto_compact_token_limit).toBe(235930);
+
+		// A model with no table entry keeps the 200K default's own numbers.
+		configureCodex({ apiKey: "sk-codex", model: "other/model" });
 		expect(readCodexToml().model_context_window).toBe(200000);
 		expect(readCodexToml().model_auto_compact_token_limit).toBe(180000);
 	});
@@ -1100,7 +1106,7 @@ describe("configureContinue", () => {
 		configureContinue({
 			apiKey: "sk",
 			model: "MiniMax/MiniMax-M3",
-			models: ["MiniMax/MiniMax-M3", "zai-org/GLM-4.7-cc"],
+			models: ["MiniMax/MiniMax-M3", "other/model"],
 		});
 
 		const raw = readContinueYaml();

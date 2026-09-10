@@ -51,9 +51,9 @@ describe("limitsFor", () => {
 			context: 262144,
 			trigger: 235930,
 		});
-		expect(limitsFor("zai-org/GLM-4.7-cc")).toEqual({
-			context: 200000,
-			trigger: 180000,
+		expect(limitsFor("zai-org/GLM-5.3-Flash")).toEqual({
+			context: 262144,
+			trigger: 235930,
 		});
 	});
 
@@ -81,9 +81,9 @@ describe("limitsFor", () => {
 
 	test("a model the gateway says nothing about still gets the table entry", () => {
 		writeCachedLimits({ "other/model": { context: 12345, trigger: 9876 } });
-		expect(limitsFor("zai-org/GLM-4.7-cc")).toEqual({
-			context: 200000,
-			trigger: 180000,
+		expect(limitsFor("zai-org/GLM-5.3-Flash")).toEqual({
+			context: 262144,
+			trigger: 235930,
 		});
 	});
 
@@ -148,7 +148,9 @@ describe("claudeWindow / claudeCompactPct", () => {
 		// 235930/262144 would be 90, but 235930/200000 is 118 — the raw ratio is
 		// meaningless once the window is clamped, so it must be bounded.
 		expect(claudeCompactPct(limitsFor("MiniMax/MiniMax-M3"))).toBe(80);
-		expect(claudeCompactPct(limitsFor("zai-org/GLM-4.7-cc"))).toBe(80);
+		// A model already at the ceiling is capped by the same guard: its own
+		// 90% target is above Claude Code's 80%.
+		expect(claudeCompactPct(DEFAULT_LIMITS)).toBe(80);
 	});
 
 	test("never exceeds 80%, which Claude Code's Rzq discards anything above", () => {
@@ -194,11 +196,10 @@ describe("declaredInput", () => {
 			declaredInput({ context: 1000000, trigger: 900000 }) - COMPACT_RESERVED,
 		).toBe(900000);
 		const m3 = limitsFor("MiniMax/MiniMax-M3");
-		const glm = limitsFor("zai-org/GLM-4.7-cc");
 		expect(declaredInput(m3)).toBe(262144);
 		expect(declaredInput(m3) - COMPACT_RESERVED).toBe(222144);
-		expect(declaredInput(glm)).toBe(200000);
-		expect(declaredInput(glm) - COMPACT_RESERVED).toBe(160000);
+		expect(declaredInput(DEFAULT_LIMITS)).toBe(200000);
+		expect(declaredInput(DEFAULT_LIMITS) - COMPACT_RESERVED).toBe(160000);
 	});
 
 	test("clamps to the true window so the budget is never overstated", () => {
