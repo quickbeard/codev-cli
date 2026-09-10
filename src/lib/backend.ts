@@ -102,33 +102,40 @@ export async function fetchCodevConfig(
 	};
 }
 
-// Manual creds may include a `/v1` suffix (OpenAI-style); /key/info lives at
-// the gateway root, so strip a trailing v1 segment before joining. Falls
-// back to AI_GATEWAY_URL when the saved key has no base_url (SSO-fetched
-// keys don't store one).
-function keyInfoUrl(baseUrl?: string): string {
-	const base = baseUrl ?? AI_GATEWAY_URL();
-	const stripped = base.replace(/\/?v1\/?$/, "");
-	const trailing = stripped.endsWith("/") ? stripped : `${stripped}/`;
-	return `${trailing}key/info`;
-}
-
-// Validates a key against the gateway's /key/info endpoint (LiteLLM): a single
-// hash-based lookup against the key table. Returns true on 2xx, false on
-// 401/403 (invalid/revoked), throws on network errors so the caller can
-// distinguish "key is bad" from "couldn't reach the gateway".
+// Validates a key by listing models through the OpenAI-compatible
+// `/v1/models` endpoint — the same call fetchModels makes, and the one path the
+// gateway is guaranteed to authenticate with the key itself. Returns true on a
+// JSON 2xx, false on 401/403 (invalid/revoked), throws on network errors and
+// anything else so the caller can tell "key is bad" from "couldn't tell".
+//
+// This used to hit LiteLLM's `/key/info` at the gateway ROOT. The root is now
+// fronted by a web app whose catch-all answers **HTTP 200 with an HTML page to
+// any bearer, including a bogus one**, so that probe could never return false:
+// the launch-time refresh (refresh.ts) never fired and the "reuse existing
+// key" path offered dead keys as valid. `/v1/models` 401s properly. The
+// content-type guard is what keeps the same failure from recurring behind
+// some other catch-all — a 200 that isn't JSON is "can't tell", never "valid".
 export async function validateApiKey(
 	apiKey: string,
 	baseUrl?: string,
 ): Promise<boolean> {
-	const res = await loggedFetch("gateway.key-info", keyInfoUrl(baseUrl), {
+	const res = await loggedFetch("gateway.key-check", modelsUrl(baseUrl), {
 		method: "GET",
-		headers: { Authorization: `Bearer ${apiKey}` },
+		headers: {
+			accept: "application/json",
+			Authorization: `Bearer ${apiKey}`,
+		},
 		signal: AbortSignal.timeout(VALIDATE_TIMEOUT_MS),
 	});
 	if (res.status === 401 || res.status === 403) return false;
 	if (!res.ok) {
 		throw new Error(`Validation failed (${res.status}): ${res.statusText}`);
+	}
+	const type = res.headers.get("content-type") ?? "";
+	if (!type.toLowerCase().includes("json")) {
+		throw new Error(
+			`Validation failed: the gateway answered with ${type || "a non-JSON body"} instead of JSON`,
+		);
 	}
 	return true;
 }
@@ -185,9 +192,11 @@ export async function fetchModels(
 	return ids;
 }
 
-// LiteLLM's aggregated per-model-name view. Lives at the gateway root next to
-// /key/info, not under /v1, so it reuses the root-stripping join rather than
-// gatewayV1Url.
+// LiteLLM's aggregated per-model-name view. Lives at the gateway ROOT, not
+// under /v1, so it uses a root-stripping join rather than gatewayV1Url. Note
+// the root is now fronted by a web app (see validateApiKey), so on the live
+// gateway this answers an HTML 200 — the JSON parse fails and the catch below
+// returns {}, which is the documented "gateway reports nothing" outcome.
 function modelGroupInfoUrl(baseUrl?: string): string {
 	const base = baseUrl ?? AI_GATEWAY_URL();
 	const stripped = base.replace(/\/?v1\/?$/, "");
@@ -258,8 +267,8 @@ export async function fetchModelWindows(
 }
 
 // Confirms the configured key can actually RUN the chosen model through the
-// gateway. validateApiKey (/key/info) and fetchModels (/v1/models) only prove
-// the key exists and that models are listable — neither proves inference is
+// gateway. validateApiKey and fetchModels (both /v1/models) only prove the key
+// authenticates and that models are listable — neither proves inference is
 // permitted. This 1-token chat completion catches the gateway 403s ("key not
 // allowed to access model", over-budget, edge/WAF blocks) that otherwise stay
 // hidden until the agent's first message. Returns null on success, or a short

@@ -16,7 +16,7 @@ import {
 import { logInfo, logWarn } from "@/lib/log.js";
 
 // Cap the pre-flight key check so a slow/hung gateway never stalls an agent
-// launch. A real /key/info round-trip is well under this; if it's slower we just
+// launch. A real /v1/models round-trip is well under this; if it's slower we just
 // launch with the existing config — we can't prove the key is dead, so we leave
 // it alone.
 const PREFLIGHT_TIMEOUT_MS = 2_500;

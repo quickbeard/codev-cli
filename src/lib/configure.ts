@@ -11,7 +11,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import TOML from "@iarna/toml";
-import { type ParseError, parse } from "jsonc-parser";
+import { applyEdits, modify, type ParseError, parse } from "jsonc-parser";
 import { AI_GATEWAY_OPENAI_URL, AI_GATEWAY_URL } from "@/lib/const.js";
 import { logInfo } from "@/lib/log.js";
 import {
@@ -136,7 +136,6 @@ export const OPENCODE_SCHEMA_URL = atob(
 );
 const OPENCODE_K = {
 	schema: atob("JHNjaGVtYQ=="),
-	mcp: atob("bWNw"),
 	provider: atob("cHJvdmlkZXI="),
 	npm: atob("bnBt"),
 	npmPkg: atob("QGFpLXNkay9vcGVuYWktY29tcGF0aWJsZQ=="),
@@ -145,6 +144,9 @@ const OPENCODE_K = {
 	baseURL: atob("YmFzZVVSTA=="),
 	apiKey: atob("YXBpS2V5"),
 	models: atob("bW9kZWxz"),
+	// Top-level default-model pin (`"<provider>/<model>"`). Never written; the
+	// writer removes a CoDev-authored one left by an older hub.
+	model: atob("bW9kZWw="),
 	recent: atob("cmVjZW50"),
 	providerID: atob("cHJvdmlkZXJJRA=="),
 	modelID: atob("bW9kZWxJRA=="),
@@ -924,21 +926,120 @@ export function configureCodevCode(creds: Credentials): ConfigureResult[] {
 	return configureOpenCodeKind("codev-code-config", creds);
 }
 
-// Read the top-level `mcp` map from an existing OpenCode-family config, or
-// undefined when the file is absent, unparseable, or has no object-valued
-// `mcp`. Best-effort by design: this writer has always recovered from corrupt
-// configs by replacing them, and preservation must never change that.
-function readPreservedMcp(path: string): Record<string, unknown> | undefined {
-	if (!existsSync(path)) return undefined;
-	try {
-		const raw = parseJsonc(readFileSync(path, "utf-8"));
-		if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-		const mcp = (raw as Record<string, unknown>)[OPENCODE_K.mcp];
-		if (!mcp || typeof mcp !== "object" || Array.isArray(mcp)) return undefined;
-		return mcp as Record<string, unknown>;
-	} catch {
-		return undefined;
+// jsonc-parser edit formatting for the OpenCode-family writer — the same
+// options lib/codegraph.ts and lib/vscode-settings.ts use, so a hub-edited
+// file looks like one the agent edited itself.
+const JSONC_FORMATTING = { insertSpaces: true, tabSize: 2, eol: "\n" } as const;
+
+// One jsonc-parser edit; `value === undefined` removes the property. Offsets
+// are computed against the text handed in, so consecutive edits must each
+// start from the previous result — never batch them against the original.
+function patchJsonc(
+	text: string,
+	path: (string | number)[],
+	value: unknown,
+): string {
+	return applyEdits(
+		text,
+		modify(text, path, value, { formattingOptions: JSONC_FORMATTING }),
+	);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+// Patch CoDev's entries into an OpenCode-family config IN PLACE, the way the
+// agent writes its own config (`Config.updateGlobal` PATCHes the file through
+// jsonc-parser, never rewrites it). CoDev Code is a standalone product now:
+// its TUI connects custom providers, its desktop app writes theme/keybind/
+// permission settings, users keep comments in codev.jsonc — and this writer
+// runs on every gateway-key auto-refresh (refresh.ts) and `codevhub model`
+// switch, not just at install. The previous whole-file replace silently
+// deleted all of that on each run (only `mcp` was carried over, after the
+// CodeGraph wiring got wiped once). Everything not listed here is untouched.
+//
+// What CoDev owns and rewrites:
+//   - `$schema`: seeded when absent (the agent's own first-run stub does the
+//     same); an existing value is left alone.
+//   - `compaction.auto` / `compaction.reserved`: one global reserve for every
+//     model in the map — OpenCode's schema has no per-model compaction block.
+//     Each model's own trigger comes from its `limit.input`, sized against
+//     exactly this number (see declaredInput). Sibling compaction keys (e.g.
+//     `prune`) are the user's and survive.
+//   - `provider.<id>`: replaced wholesale, so stale models and any inline
+//     `options.apiKey` an older hub wrote are gone; the agent's startup
+//     migration would scrub the key anyway, but a hub must never re-add one.
+//   - `provider.<other CoDev id>`: removed. The agent's own configure flow
+//     can't delete (its PATCH is a deep merge), so after the AIGW rename a
+//     legacy `netgate` block lingers beside the new one and the model picker
+//     shows every model twice — the fork documents that "a hub-managed install
+//     converges on its next hub configure/refresh". Only ids CoDev itself
+//     writes (codevProviderIds) are candidates; a provider the user connected
+//     in-TUI is never touched.
+//   - top-level `model`: removed when it pins a CoDev provider. The pin was
+//     dropped from this writer because it outranks the TUI's persisted model
+//     selection on every startup (Provider defaultModel checks config first,
+//     then the state dir's model.json recents), so every in-CLI switch
+//     reverted on restart. A whole-file replace erased an old pin implicitly;
+//     a patch has to do it on purpose. A pin on a user's own provider stays.
+//
+// A file that can't be edited safely — syntax errors, or a root that isn't an
+// object — is replaced with a fresh one, as this writer always has: the backup
+// taken by the caller still holds whatever was there.
+function patchOpenCodeConfig(
+	path: string,
+	providerId: string,
+	block: Record<string, unknown>,
+): void {
+	let text = existsSync(path) ? readFileSync(path, "utf-8") : "";
+	const errors: ParseError[] = [];
+	const parsed: unknown = parse(text, errors, {
+		allowTrailingComma: true,
+		allowEmptyContent: true,
+	});
+	const editable =
+		errors.length === 0 && (parsed === undefined || isPlainObject(parsed));
+	const root: Record<string, unknown> =
+		editable && isPlainObject(parsed) ? parsed : {};
+	if (!editable || text.trim() === "") text = "{}";
+
+	if (root[OPENCODE_K.schema] === undefined) {
+		text = patchJsonc(text, [OPENCODE_K.schema], OPENCODE_SCHEMA_URL);
 	}
+
+	const compaction = {
+		[OPENCODE_K.auto]: true,
+		[OPENCODE_K.reserved]: COMPACT_RESERVED,
+	};
+	if (isPlainObject(root[OPENCODE_K.compaction])) {
+		for (const [key, value] of Object.entries(compaction)) {
+			text = patchJsonc(text, [OPENCODE_K.compaction, key], value);
+		}
+	} else {
+		text = patchJsonc(text, [OPENCODE_K.compaction], compaction);
+	}
+
+	const ids = codevProviderIds();
+	const providers = root[OPENCODE_K.provider];
+	if (isPlainObject(providers)) {
+		text = patchJsonc(text, [OPENCODE_K.provider, providerId], block);
+		for (const id of ids) {
+			if (id !== providerId && id in providers) {
+				text = patchJsonc(text, [OPENCODE_K.provider, id], undefined);
+			}
+		}
+	} else {
+		text = patchJsonc(text, [OPENCODE_K.provider], { [providerId]: block });
+	}
+
+	const pin = root[OPENCODE_K.model];
+	if (typeof pin === "string" && ids.includes(pin.split("/")[0] ?? "")) {
+		text = patchJsonc(text, [OPENCODE_K.model], undefined);
+	}
+
+	writeFileSync(path, text, { mode: 0o600 });
+	chmodSync(path, 0o600);
 }
 
 function configureOpenCodeKind(
@@ -948,13 +1049,6 @@ function configureOpenCodeKind(
 	const { path: backupPath, created } = ensureBackup(kind);
 	const sourcePath = sourcePathOf(kind);
 	mkdirSync(dirname(sourcePath), { recursive: true });
-
-	// Carry the `mcp` map across the rewrite. This writer doesn't just run at
-	// install time: every gateway-key auto-refresh (refresh.ts) and model
-	// switch rewrites the whole file, and dropping `mcp` there would silently
-	// unwire MCP servers — CodeGraph's entry, or servers the user added — that
-	// were wired after configure last ran.
-	const mcp = readPreservedMcp(sourcePath);
 
 	const baseUrl = creds.baseUrl
 		? normalizeOpenCodeBaseUrl(creds.baseUrl)
@@ -1027,41 +1121,25 @@ function configureOpenCodeKind(
 		}),
 	);
 
-	writeJson(sourcePath, {
-		[OPENCODE_K.schema]: OPENCODE_SCHEMA_URL,
-		...(mcp !== undefined ? { [OPENCODE_K.mcp]: mcp } : {}),
-		// No top-level `model`. The install-time model choice exists for Claude
-		// Code and Codex, which can only run one model at a time; OpenCode and
-		// CoDev Code switch freely in-CLI (docs/hub/installation). A pin there
-		// outranks their saved selection on every launch — it beats the recent
-		// models in their state dir — so each in-CLI switch reverted on restart
-		// and only hand-editing the config undid it. The chosen model is
-		// seeded into that saved selection instead (seedOpenCodeRecentModel,
-		// below), which decides the first launch and yields to any later
-		// switch. The models-map order alone can't carry the choice: with no
-		// pin and no saved selection the TUI falls back to the first provider
-		// in its list — upstream's hosted Zen provider, which self-registers
-		// ahead of config providers — and, within a provider, to the server's
-		// own model sort, neither of which reads this map's order. This is why
-		// `codevhub model` steers only Claude Code and Codex directly.
-		// One global reserve for every model in the map — OpenCode's schema has no
-		// per-model compaction block. Each model's own trigger comes from its
-		// `limit.input` above, which is sized against exactly this number.
-		[OPENCODE_K.compaction]: {
-			[OPENCODE_K.auto]: true,
-			[OPENCODE_K.reserved]: COMPACT_RESERVED,
+	// No top-level `model` and nothing beyond CoDev's own entries: the install-
+	// time model choice exists for Claude Code and Codex, which can only run one
+	// model at a time; OpenCode and CoDev Code switch freely in-CLI
+	// (docs/hub/installation), and the chosen model is seeded into their saved
+	// selection instead (seedOpenCodeRecentModel, below), which decides the
+	// first launch and yields to any later switch. The models-map order alone
+	// can't carry the choice: with no pin and no saved selection the TUI falls
+	// back to the first provider in its list — upstream's hosted Zen provider,
+	// which self-registers ahead of config providers — and, within a provider,
+	// to the server's own model sort, neither of which reads this map's order.
+	// This is why `codevhub model` steers only Claude Code and Codex directly.
+	patchOpenCodeConfig(sourcePath, provider.id, {
+		[OPENCODE_K.npm]: OPENCODE_K.npmPkg,
+		[OPENCODE_K.name]: provider.name,
+		[OPENCODE_K.options]: {
+			[OPENCODE_K.baseURL]: baseUrl,
+			...(keyless ? {} : { [OPENCODE_K.apiKey]: creds.apiKey }),
 		},
-		[OPENCODE_K.provider]: {
-			[provider.id]: {
-				[OPENCODE_K.npm]: OPENCODE_K.npmPkg,
-				[OPENCODE_K.name]: provider.name,
-				[OPENCODE_K.options]: {
-					[OPENCODE_K.baseURL]: baseUrl,
-					...(keyless ? {} : { [OPENCODE_K.apiKey]: creds.apiKey }),
-				},
-				[OPENCODE_K.models]: modelsMap,
-			},
-		},
+		[OPENCODE_K.models]: modelsMap,
 	});
 
 	seedOpenCodeRecentModel(kind, provider.id, defaultModel);

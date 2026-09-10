@@ -73,8 +73,12 @@ export function runAgent(cmd: string, args: string[]): Promise<number> {
 		};
 		// CoDev Code (the codev-code package) has its own self-updater, but the
 		// hub owns updates (`codevhub update`) — disable the agent's updater at
-		// every launch so the two never race.
+		// every launch so the two never race. The fork renamed its env flags
+		// OPENCODE_* → CODEV_* (codev-code #41), so the switch it reads today is
+		// CODEV_DISABLE_AUTOUPDATE; the old spelling stays for builds that
+		// predate the rename. Setting only the old one disabled nothing.
 		if (cmd === "codev") {
+			env.CODEV_DISABLE_AUTOUPDATE = "1";
 			env.OPENCODE_DISABLE_AUTOUPDATE = "1";
 		}
 		// On Windows, npm-installed agent binaries are `.cmd` shims (e.g.

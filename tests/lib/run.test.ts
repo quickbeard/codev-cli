@@ -310,19 +310,24 @@ describe("runAgent", () => {
 			});
 	}
 
-	test("disables CoDev Code's self-updater via OPENCODE_DISABLE_AUTOUPDATE", async () => {
+	test("disables CoDev Code's self-updater via CODEV_DISABLE_AUTOUPDATE", async () => {
 		// The hub owns updates (`codevhub update`), so every launch of the agent
-		// must pin the kill switch on its own updater.
+		// must pin the kill switch on its own updater. The fork reads the
+		// CODEV_-prefixed flag (it renamed every OPENCODE_* env var); the old
+		// spelling rides along for builds that predate the rename.
 		const env = await runCapturingEnv("codev");
+		expect(env?.CODEV_DISABLE_AUTOUPDATE).toBe("1");
 		expect(env?.OPENCODE_DISABLE_AUTOUPDATE).toBe("1");
 	});
 
-	test("does not set OPENCODE_DISABLE_AUTOUPDATE for the other agents", async () => {
+	test("does not set the autoupdate kill switch for the other agents", async () => {
 		// Guard against the parent process's own env leaking into the assertion.
+		vi.stubEnv("CODEV_DISABLE_AUTOUPDATE", undefined);
 		vi.stubEnv("OPENCODE_DISABLE_AUTOUPDATE", undefined);
 		try {
 			for (const cmd of ["opencode", "claude", "codex"]) {
 				const env = await runCapturingEnv(cmd);
+				expect(env?.CODEV_DISABLE_AUTOUPDATE).toBeUndefined();
 				expect(env?.OPENCODE_DISABLE_AUTOUPDATE).toBeUndefined();
 			}
 		} finally {
