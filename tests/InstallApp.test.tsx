@@ -531,9 +531,7 @@ describe("InstallApp fail-stop invariant", () => {
 		expect(history).toContain("Happy coding");
 	});
 
-	// Parked while Codex is hidden from ToolSelect (still fully wired downstream —
-	// just not user-selectable). Un-skip when the Codex row is surfaced again.
-	test.skip("Codex selection routes to configureCodex and reaches done", async () => {
+	test("Codex selection routes to configureCodex and reaches done", async () => {
 		stubExecFile(() => ({ stdout: "ok" }));
 		stubModels();
 		vi.spyOn(auth, "login").mockResolvedValue(fakeAuth());
@@ -1093,10 +1091,9 @@ describe("InstallApp fail-stop invariant", () => {
 
 		const { stdin, frames } = render(<InstallApp />);
 
-		// Pick the Claude Code (extension) row (3rd, index 2 — Codex/OpenCode
-		// are hidden, so it sits right below Claude Code).
+		// Pick the Claude Code (extension) row (5th, index 4).
 		await waitForFrame(frames, "Select the AI agent(s) to install");
-		for (let i = 0; i < 2; i++) {
+		for (let i = 0; i < 4; i++) {
 			stdin.write("\x1B[B");
 			await new Promise((r) => setTimeout(r, 30));
 		}
@@ -1126,9 +1123,8 @@ describe("InstallApp fail-stop invariant", () => {
 	});
 
 	test("Claude Code CLI + extension share the backup kind: single configure call, both install tasks scheduled", async () => {
-		// Picks Claude Code CLI (2nd row) AND Claude Code (extension) (3rd
-		// row — Codex/OpenCode are hidden), then VS Code in the merged sub-
-		// select. Asserts:
+		// Picks Claude Code CLI (2nd row) AND Claude Code (extension) (5th
+		// row), then VS Code in the merged sub-select. Asserts:
 		//  - `configureClaudeCode` runs exactly once (shared BackupKind).
 		//  - Both the npm install task (@anthropic-ai/claude-code) and the
 		//    extension install task (anthropic.claude-code (VS Code)) appear.
@@ -1157,14 +1153,15 @@ describe("InstallApp fail-stop invariant", () => {
 		const { stdin, frames } = render(<InstallApp />);
 
 		await waitForFrame(frames, "Select the AI agent(s) to install");
-		// Row 1 (Claude Code CLI) — toggle, then arrow down to row 2 (Claude
-		// Code (extension), now directly below) and toggle.
+		// Row 1 (Claude Code CLI) — toggle, then arrow down to row 4 and toggle.
 		stdin.write("\x1B[B");
 		await new Promise((r) => setTimeout(r, 30));
 		stdin.write(" ");
 		await new Promise((r) => setTimeout(r, 30));
-		stdin.write("\x1B[B");
-		await new Promise((r) => setTimeout(r, 30));
+		for (let i = 0; i < 3; i++) {
+			stdin.write("\x1B[B");
+			await new Promise((r) => setTimeout(r, 30));
+		}
 		stdin.write(" ");
 		await new Promise((r) => setTimeout(r, 30));
 		stdin.write("\r");
@@ -1230,10 +1227,7 @@ describe("InstallApp fail-stop invariant", () => {
 		});
 	});
 
-	// Parked while Codex is hidden from ToolSelect: this exercises the
-	// survivor-advances fail-stop via a Codex selection that's no longer
-	// user-reachable. Un-skip when the Codex row is surfaced again.
-	test.skip("partial install failure: survivor advances to Configure, failed tool is dropped", async () => {
+	test("partial install failure: survivor advances to Configure, failed tool is dropped", async () => {
 		// User selects both Claude Code and Codex. The codex npm install
 		// hard-fails ("disk full"); the claude-code one succeeds. Pre-change
 		// behavior was to park at install-failed and force the user to Ctrl-C.
