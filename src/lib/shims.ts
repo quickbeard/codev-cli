@@ -64,6 +64,14 @@ export function shimDir(): string {
 	return join(homedir(), ".codev-hub", "bin");
 }
 
+// Pre-0.4 hub versions wrote shims to ~/.codev/bin (now ~/.codev-hub/bin).
+// Those shims exec the bare `codev` command which no longer exists, so leaving
+// them on PATH makes isAgentAvailable and runAgent resolve the stale shim
+// instead of the real binary.
+function legacyShimDirs(): string[] {
+	return [join(homedir(), ".codev", "bin")];
+}
+
 // run.ts uses this to strip our shim dir from the child's PATH so that
 // `codevhub claude` -> spawn("claude") resolves the real npm-installed binary
 // instead of recursing through the shim.
@@ -72,10 +80,10 @@ export function stripShimDirFromPath(
 	sep = delimiter,
 ): string {
 	if (!path) return "";
-	const dir = shimDir();
+	const excluded = new Set([shimDir(), ...legacyShimDirs()]);
 	return path
 		.split(sep)
-		.filter((p) => p !== dir)
+		.filter((p) => !excluded.has(p))
 		.join(sep);
 }
 

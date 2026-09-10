@@ -165,6 +165,27 @@ describe("stripShimDirFromPath", () => {
 			["/usr/local/bin", "/usr/bin"].join(delimiter),
 		);
 	});
+
+	test.skipIf(process.platform === "win32")(
+		"also strips the legacy ~/.codev/bin shim dir from pre-0.4 installs",
+		async () => {
+			const { stripShimDirFromPath } = await import("@/lib/shims.js");
+			const legacy = join(tempDir, ".codev", "bin");
+			const path = ["/usr/local/bin", legacy, "/usr/bin"].join(":");
+			expect(stripShimDirFromPath(path, ":")).toBe("/usr/local/bin:/usr/bin");
+		},
+	);
+
+	test.skipIf(process.platform === "win32")(
+		"strips both current and legacy shim dirs simultaneously",
+		async () => {
+			const { shimDir, stripShimDirFromPath } = await import("@/lib/shims.js");
+			const dir = shimDir();
+			const legacy = join(tempDir, ".codev", "bin");
+			const path = [dir, "/usr/bin", legacy, "/usr/local/bin"].join(":");
+			expect(stripShimDirFromPath(path, ":")).toBe("/usr/bin:/usr/local/bin");
+		},
+	);
 });
 
 describe.skipIf(process.platform === "win32")("installShims (Unix)", () => {

@@ -306,16 +306,12 @@ async function ensureAuth(
 	const auth = loadAuth();
 	if (auth) return auth;
 	const fresh = await login(onStatus, (openBrowser, url, submitManualCode) => {
-		// Hand the URL to the dedicated channel when the caller provides one
-		// (UploadApp pins it under the spinner). Fall back to onStatus so the
-		// daemon log — or any future caller that doesn't wire onLoginUrl —
-		// still has a paste fallback.
+		// Hand the URL to the interactive app when possible; other callers receive
+		// the manual fallback through their status channel.
 		if (onLoginUrl) onLoginUrl(url);
 		else
 			onStatus(`If your browser didn't open, visit this URL manually: ${url}`);
-		// Expose the paste-back submitter to an interactive caller (UploadApp) so
-		// a no-browser user can finish login without leaving `codevhub upload`. The
-		// daemon doesn't wire this — it has no TTY and bails when logged out.
+		// The upload daemon deliberately does not wire this because it has no TTY.
 		onManualSubmit?.(submitManualCode);
 		openBrowser();
 	});

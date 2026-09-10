@@ -21,6 +21,10 @@ import { initLogging, logWarn } from "@/lib/log.js";
 import { runLogs } from "@/lib/logs.js";
 import { runSkillOffice } from "@/lib/office.js";
 import { applyEnvProxy } from "@/lib/proxy.js";
+import {
+	parseReadinessArgs,
+	type ReadinessCliOptions,
+} from "@/lib/readiness-cli.js";
 import { ensureNodeSqliteOrReexec } from "@/lib/reexec.js";
 import { ensureFreshGatewayKey } from "@/lib/refresh.js";
 import {
@@ -54,6 +58,7 @@ import {
 } from "@/lib/tty.js";
 import { runUploadDaemon, spawnUploadDaemon } from "@/lib/upload.js";
 import { ModelApp } from "@/ModelApp.js";
+import { ReadinessApp } from "@/ReadinessApp.js";
 import { RemoveApp } from "@/RemoveApp.js";
 import { SkillPullApp } from "@/SkillPullApp.js";
 import { SkillPushApp } from "@/SkillPushApp.js";
@@ -343,6 +348,34 @@ switch (command) {
 	}
 	case "logs": {
 		process.exit(runLogs(args));
+		break;
+	}
+	case "readiness": {
+		requireInteractiveTerminal("readiness");
+		let readiness: ReadinessCliOptions;
+		try {
+			readiness = parseReadinessArgs(args);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
+			console.error(
+				"Usage: codevhub readiness [--profile <id-or-slug>] [--agent <claude|codex|opencode>] [--model <model-id>]",
+			);
+			process.exit(1);
+			break;
+		}
+		const { waitUntilExit } = render(
+			<ReadinessApp
+				options={{ model: readiness.model }}
+				profileSelector={readiness.profile}
+				requestedAgent={readiness.agent}
+			/>,
+		);
+		try {
+			await waitUntilExit();
+			process.exit(0);
+		} catch {
+			process.exit(1);
+		}
 		break;
 	}
 	// `--force` is a deliberate escape hatch and is deliberately absent from

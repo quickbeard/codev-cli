@@ -182,6 +182,24 @@ Details worth knowing:
 - **Retention** is automatic: files older than 14 days are pruned, and the directory is capped at 50 MB.
 - **Tuning:** `CODEV_LOG_LEVEL` (`debug` by default; `silent` disables logging), `CODEV_LOG_DIR` relocates the directory.
 
+## Agent readiness
+
+Run `codevhub readiness` from a Git repository to choose Claude Code, Codex, or
+OpenCode and start a headless, read-only readiness evaluation. CoDev validates
+the agent's evidence against its versioned rubric, computes scores locally,
+rejects scans that change the working tree, and uploads the validated report.
+The report is a local agent evaluation, not a server-verified audit.
+
+Readiness uses each harness's configured default model for Claude Code and
+Codex; `codevhub readiness --model <model-id>` provides a one-off override for
+those harnesses. OpenCode readiness always uses
+`aigateway/MiniMax/MiniMax-M2.7`. Repair, timeout, and output limits are bounded
+product safeguards rather than user configuration. The selected harness must
+first be configured through `codevhub install`.
+
+The rubric version is deliberately not configurable: it identifies the actual
+report schema and scoring rubric shared by CLI, proxy, and dashboard.
+
 ## Development
 
 ```bash
