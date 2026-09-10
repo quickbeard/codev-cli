@@ -14,36 +14,23 @@ export type ToolSelectSentinel =
 	| typeof CONTINUE_SENTINEL;
 export type ToolSelectValue = Tool | ToolSelectSentinel;
 
-const TOOLS: {
-	label: string;
-	value: ToolSelectValue;
-	locked?: boolean;
-	hidden?: boolean;
-}[] = [
+const TOOLS: { label: string; value: ToolSelectValue; locked?: boolean }[] = [
 	// CoDev Code is the flagship agent — always installed and configured, so its
 	// row is shown pre-checked and can't be toggled off. Kept at index 0 so the
 	// optional agents keep their positions.
 	{ label: "CoDev Code", value: "codev-code", locked: true },
 	{ label: "Claude Code", value: "claude-code" },
-	// Codex and OpenCode are temporarily withheld from the selection UI. All the
-	// underlying configure/install/update logic still handles them end-to-end —
-	// they're only hidden from users until we're ready to surface them. Flip
-	// `hidden` off (or delete it) to bring the rows back.
-	{ label: "Codex", value: "codex", hidden: true },
-	{ label: "OpenCode", value: "opencode", hidden: true },
+	{ label: "Codex", value: "codex" },
+	{ label: "OpenCode", value: "opencode" },
 	{ label: "Claude Code (extension)", value: CLAUDE_CODE_EXT_SENTINEL },
 	{ label: "Continue (extension)", value: CONTINUE_SENTINEL },
 ];
 
-// Rows actually rendered and navigable. Hidden tools are dropped from the UI
-// only; everything downstream (Configure, restore, update) is untouched.
-const VISIBLE_TOOLS = TOOLS.filter((t) => !t.hidden);
-
 // Locked tools are emitted on every confirm regardless of the mutable
 // selection, and always lead the emitted list.
-const LOCKED_VALUES: ToolSelectValue[] = VISIBLE_TOOLS.filter(
-	(t) => t.locked,
-).map((t) => t.value);
+const LOCKED_VALUES: ToolSelectValue[] = TOOLS.filter((t) => t.locked).map(
+	(t) => t.value,
+);
 
 interface ToolSelectProps {
 	onConfirm: (tools: ToolSelectValue[]) => void;
@@ -64,9 +51,9 @@ export function ToolSelect({
 			if (key.upArrow) {
 				setCursor((c) => Math.max(0, c - 1));
 			} else if (key.downArrow) {
-				setCursor((c) => Math.min(VISIBLE_TOOLS.length - 1, c + 1));
+				setCursor((c) => Math.min(TOOLS.length - 1, c + 1));
 			} else if (input === " ") {
-				const tool = VISIBLE_TOOLS[cursor];
+				const tool = TOOLS[cursor];
 				// Locked rows (CoDev Code) are always included and can't be toggled.
 				if (!tool || tool.locked) return;
 				setSelected((prev) => {
@@ -92,7 +79,7 @@ export function ToolSelect({
 
 	return (
 		<Box flexDirection="column">
-			{VISIBLE_TOOLS.map((tool, i) => {
+			{TOOLS.map((tool, i) => {
 				const isSelected = tool.locked || selected.has(tool.value);
 				const isCursor = !readOnly && cursor === i;
 				return (
