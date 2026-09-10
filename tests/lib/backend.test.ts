@@ -115,17 +115,17 @@ describe("fetchApiKey", () => {
 });
 
 describe("validateApiKey", () => {
-	test("returns true on a 2xx response from /key/info", async () => {
+	test("returns true on a JSON 2xx from /v1/models", async () => {
 		const fetchSpy = vi
 			.spyOn(globalThis, "fetch")
-			.mockResolvedValue(jsonResponse(200, { key: "sk-abc", spend: 0 }));
+			.mockResolvedValue(jsonResponse(200, { data: [{ id: "m" }] }));
 		await expect(validateApiKey("sk-abc")).resolves.toBe(true);
 
 		const [url, init] = fetchSpy.mock.calls[0] as [
 			string,
 			{ method?: string; headers?: Record<string, string> },
 		];
-		expect(url).toBe(`${AI_GATEWAY_URL()}/key/info`);
+		expect(url).toBe(`${AI_GATEWAY_OPENAI_URL()}/models`);
 		expect(init.method).toBe("GET");
 		expect(init.headers?.Authorization).toBe("Bearer sk-abc");
 	});
@@ -160,36 +160,49 @@ describe("validateApiKey", () => {
 		await expect(validateApiKey("sk-x")).rejects.toThrow("ECONNREFUSED");
 	});
 
-	test("strips a trailing /v1 from the baseUrl when targeting /key/info", async () => {
+	test("treats a non-JSON 200 as unverifiable, never as valid", async () => {
+		// The live gateway's ROOT is fronted by a web app whose catch-all answers
+		// 200 + HTML to any bearer, bogus included. The old /key/info probe read
+		// that as "valid", so an expired key was never refreshed at launch and
+		// the "reuse existing key" path offered it. A 200 that isn't JSON must
+		// surface as "couldn't tell" (throw), which callers already handle.
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response("<!DOCTYPE html><html><body>Sign in</body></html>", {
+				status: 200,
+				headers: { "Content-Type": "text/html; charset=utf-8" },
+			}),
+		);
+		await expect(validateApiKey("sk-bogus")).rejects.toThrow("instead of JSON");
+	});
+
+	test("appends /models to a baseUrl that already ends in /v1", async () => {
 		const fetchSpy = vi
 			.spyOn(globalThis, "fetch")
-			.mockResolvedValue(jsonResponse(200, {}));
+			.mockResolvedValue(jsonResponse(200, { data: [] }));
 		await validateApiKey("sk-y", "https://my-gw.example.com/v1");
 		const [url] = fetchSpy.mock.calls[0] as [string];
-		expect(url).toBe("https://my-gw.example.com/key/info");
+		expect(url).toBe("https://my-gw.example.com/v1/models");
 	});
 
-	test("handles a baseUrl without /v1", async () => {
+	test("adds the /v1 segment for a baseUrl without it", async () => {
 		const fetchSpy = vi
 			.spyOn(globalThis, "fetch")
-			.mockResolvedValue(jsonResponse(200, {}));
+			.mockResolvedValue(jsonResponse(200, { data: [] }));
 		await validateApiKey("sk-z", "https://gw.example.com/");
 		const [url] = fetchSpy.mock.calls[0] as [string];
-		expect(url).toBe("https://gw.example.com/key/info");
+		expect(url).toBe("https://gw.example.com/v1/models");
 	});
 
-	test("inserts the path separator when AI_GATEWAY_URL has no trailing slash", async () => {
-		// Regression: keyInfoUrl(undefined) used to produce ".../gatewaykey/info"
-		// because it concatenated AI_GATEWAY_URL (no trailing slash) directly
-		// with "key/info". SSO-fetched keys have no base_url, so they hit this
-		// fallback — and the malformed URL made validateApiKey throw, hiding
-		// the "use existing API key" option even when the key was valid.
+	test("falls back to the cached gateway URL when the key has no base_url", async () => {
+		// SSO-fetched keys store no base_url, so they take this fallback; the
+		// URL must be well-formed or validateApiKey throws and the "use existing
+		// API key" option disappears even though the key is fine.
 		const fetchSpy = vi
 			.spyOn(globalThis, "fetch")
-			.mockResolvedValue(jsonResponse(200, {}));
+			.mockResolvedValue(jsonResponse(200, { data: [] }));
 		await validateApiKey("sk-w");
 		const [url] = fetchSpy.mock.calls[0] as [string];
-		expect(url.endsWith("/gateway/key/info")).toBe(true);
+		expect(url).toBe(`${AI_GATEWAY_URL()}/v1/models`);
 	});
 });
 

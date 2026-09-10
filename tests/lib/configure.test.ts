@@ -541,7 +541,7 @@ describe("configureOpenCode", () => {
 		expect(existsSync(join(tempDir, ".claude.json"))).toBe(false);
 	});
 
-	test("replaces existing opencode.json and backs up the file", async () => {
+	test("patches CoDev's entries into an existing opencode.json and backs up the file", async () => {
 		const dir = join(tempDir, ".config", "opencode");
 		const filePath = join(dir, "opencode.json");
 		const backupPath = `${filePath}.backup`;
@@ -562,9 +562,12 @@ describe("configureOpenCode", () => {
 		expect(backup.someSetting).toBe("keep");
 		expect(backup.provider.other.name).toBe("Other");
 
+		// The file is the user's: their settings and their own providers survive
+		// the write, the way the agent's own config PATCH leaves them. Only
+		// CoDev's entries are (re)written.
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
-		expect(config.someSetting).toBeUndefined();
-		expect(config.provider.other).toBeUndefined();
+		expect(config.someSetting).toBe("keep");
+		expect(config.provider.other.name).toBe("Other");
 		expect(config.provider.aigw.options.apiKey).toBe("sk-new");
 	});
 
@@ -603,7 +606,7 @@ describe("configureOpenCode", () => {
 		expect(config.provider.aigw.options.apiKey).toBe("sk-new");
 	});
 
-	test("does not carry a non-object `mcp` value across a rewrite", async () => {
+	test("leaves a non-object `mcp` value alone — it is not ours to fix", async () => {
 		const dir = join(tempDir, ".config", "opencode");
 		const filePath = join(dir, "opencode.json");
 		mkdirSync(dir, { recursive: true });
@@ -613,7 +616,8 @@ describe("configureOpenCode", () => {
 		configureOpenCode({ apiKey: "sk-new", model: "m" });
 
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
-		expect(config.mcp).toBeUndefined();
+		expect(config.mcp).toBe("not a server map");
+		expect(config.provider.aigw.options.apiKey).toBe("sk-new");
 	});
 
 	test("preserves a pre-existing opencode.json backup across repeated runs", async () => {
@@ -695,7 +699,7 @@ describe("configureCodevCode", () => {
 		).toBe(false);
 	});
 
-	test("replaces existing codev.json and backs up the file", async () => {
+	test("patches CoDev's entries into an existing codev.json and backs up the file", async () => {
 		const dir = join(tempDir, ".config", "codev");
 		const filePath = join(dir, "codev.json");
 		const backupPath = `${filePath}.backup`;
@@ -717,9 +721,12 @@ describe("configureCodevCode", () => {
 		expect(backup.someSetting).toBe("keep");
 		expect(backup.provider.other.name).toBe("Other");
 
+		// CoDev Code owns this file as a product now (desktop settings, in-TUI
+		// custom providers, comments in codev.jsonc); the hub writes only its own
+		// entries and leaves the rest exactly as found.
 		const config = JSON.parse(readFileSync(filePath, "utf-8"));
-		expect(config.someSetting).toBeUndefined();
-		expect(config.provider.other).toBeUndefined();
+		expect(config.someSetting).toBe("keep");
+		expect(config.provider.other.name).toBe("Other");
 		expect(config.provider.aigw.options.apiKey).toBeUndefined();
 		const auth = JSON.parse(
 			readFileSync(
@@ -767,6 +774,168 @@ describe("configureCodevCode", () => {
 			),
 		);
 		expect(auth.aigw).toEqual({ type: "api", key: "sk-new" });
+	});
+
+	test("keeps comments, user settings and in-TUI providers in codev.jsonc", async () => {
+		// The shape CoDev Code itself produces: a .jsonc with comments, desktop
+		// settings, a provider the user connected through the TUI's custom
+		// flow, and a stale CoDev block from an older hub carrying an inline key.
+		const dir = join(tempDir, ".config", "codev");
+		const filePath = join(dir, "codev.jsonc");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			filePath,
+			`{
+  // user comment: keep me
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "codev-dark",
+  "keybinds": { "leader": "ctrl+x" },
+  "compaction": { "auto": true, "reserved": 12345, "prune": false },
+  "provider": {
+    "aigw": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "AIGW",
+      "options": { "baseURL": "https://old.example/v1", "apiKey": "sk-inline-old" },
+      "models": { "stale/model": { "name": "stale/model" } }
+    },
+    "mycorp": {
+      "name": "My Corp",
+      "options": { "baseURL": "https://llm.mycorp.example/v1" },
+      "models": { "corp/model": { "name": "corp/model" } }
+    }
+  },
+  "mcp": { "codegraph": { "type": "local", "command": ["codegraph", "serve", "--mcp"], "enabled": true } }
+}
+`,
+		);
+
+		const { configureCodevCode } = await import("@/lib/configure.js");
+		configureCodevCode({
+			apiKey: "sk-new",
+			model: "m",
+			baseUrl: "https://new.example",
+		});
+
+		const text = readFileSync(filePath, "utf-8");
+		expect(text).toContain("// user comment: keep me");
+		const { parse } = await import("jsonc-parser");
+		const config = parse(text);
+		// User-owned: untouched.
+		expect(config.theme).toBe("codev-dark");
+		expect(config.keybinds).toEqual({ leader: "ctrl+x" });
+		expect(config.provider.mycorp.options.baseURL).toBe(
+			"https://llm.mycorp.example/v1",
+		);
+		expect(config.mcp.codegraph.command).toEqual([
+			"codegraph",
+			"serve",
+			"--mcp",
+		]);
+		// CoDev-owned: rewritten. The block is replaced wholesale — the stale
+		// model and the inline key are gone — and compaction siblings survive.
+		expect(config.provider.aigw.options).toEqual({
+			baseURL: "https://new.example/v1",
+		});
+		expect(Object.keys(config.provider.aigw.models)).toEqual(["m"]);
+		expect(config.compaction).toEqual({
+			auto: true,
+			reserved: 40000,
+			prune: false,
+		});
+	});
+
+	test("drops the other CoDev provider blocks so the picker converges on one id", async () => {
+		// CoDev Code's own configure flow is a deep-merge PATCH and cannot
+		// delete, so after the AIGW rename a legacy `netgate` block lingers
+		// beside the new one and every model shows twice. The fork relies on
+		// the hub's next write to converge; a provider the user connected
+		// themselves is not a candidate.
+		const dir = join(tempDir, ".config", "codev");
+		const filePath = join(dir, "codev.json");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			filePath,
+			JSON.stringify({
+				provider: {
+					netgate: { name: "netGate", options: { baseURL: "x" } },
+					aigateway: { name: "aigateway", options: { baseURL: "x" } },
+					"ai-gateway": { name: "AI Gateway", options: { baseURL: "x" } },
+					mine: { name: "Mine", options: { baseURL: "x" } },
+				},
+			}),
+		);
+
+		const { configureCodevCode } = await import("@/lib/configure.js");
+		configureCodevCode({ apiKey: "sk-new", model: "m" });
+
+		const config = JSON.parse(readFileSync(filePath, "utf-8"));
+		expect(Object.keys(config.provider).sort()).toEqual(["aigw", "mine"]);
+	});
+
+	test("removes a CoDev-authored top-level model pin and keeps a user's", async () => {
+		// An older hub pinned `model: "<codev id>/<model>"`, which outranks the
+		// TUI's saved selection on every startup. The whole-file replace used
+		// to erase it implicitly; the patch must do so explicitly — and only for
+		// a pin on a CoDev provider.
+		const dir = join(tempDir, ".config", "codev");
+		const filePath = join(dir, "codev.json");
+		mkdirSync(dir, { recursive: true });
+		const { configureCodevCode } = await import("@/lib/configure.js");
+
+		writeFileSync(
+			filePath,
+			JSON.stringify({ model: "netgate/MiniMax/MiniMax-M3" }),
+		);
+		configureCodevCode({ apiKey: "sk-new", model: "m" });
+		expect(JSON.parse(readFileSync(filePath, "utf-8")).model).toBeUndefined();
+
+		writeFileSync(filePath, JSON.stringify({ model: "anthropic/claude" }));
+		configureCodevCode({ apiKey: "sk-new", model: "m" });
+		expect(JSON.parse(readFileSync(filePath, "utf-8")).model).toBe(
+			"anthropic/claude",
+		);
+	});
+
+	test("leaves an existing $schema alone and seeds it when absent", async () => {
+		const dir = join(tempDir, ".config", "codev");
+		const filePath = join(dir, "codev.json");
+		mkdirSync(dir, { recursive: true });
+		const { configureCodevCode } = await import("@/lib/configure.js");
+
+		writeFileSync(filePath, JSON.stringify({ $schema: "https://custom" }));
+		configureCodevCode({ apiKey: "sk-new", model: "m" });
+		expect(JSON.parse(readFileSync(filePath, "utf-8")).$schema).toBe(
+			"https://custom",
+		);
+
+		writeFileSync(filePath, JSON.stringify({ theme: "x" }));
+		configureCodevCode({ apiKey: "sk-new", model: "m" });
+		expect(JSON.parse(readFileSync(filePath, "utf-8")).$schema).toBe(
+			"https://opencode.ai/config.json",
+		);
+	});
+
+	test("replaces a config it cannot edit safely (syntax error, non-object root)", async () => {
+		// The one case where the file is rewritten from scratch, as it always
+		// was — the backup taken first still holds the broken original.
+		const dir = join(tempDir, ".config", "codev");
+		const filePath = join(dir, "codev.json");
+		mkdirSync(dir, { recursive: true });
+		const { configureCodevCode } = await import("@/lib/configure.js");
+
+		writeFileSync(filePath, "{ not json at all");
+		configureCodevCode({ apiKey: "sk-new", model: "m" });
+		let config = JSON.parse(readFileSync(filePath, "utf-8"));
+		expect(config.provider.aigw.options.baseURL).toBe(AI_GATEWAY_OPENAI_URL());
+		expect(config.compaction).toEqual({ auto: true, reserved: 40000 });
+		expect(readFileSync(`${filePath}.backup`, "utf-8")).toBe(
+			"{ not json at all",
+		);
+
+		writeFileSync(filePath, JSON.stringify(["an", "array"]));
+		configureCodevCode({ apiKey: "sk-new", model: "m" });
+		config = JSON.parse(readFileSync(filePath, "utf-8"));
+		expect(config.provider.aigw.models.m.name).toBe("m");
 	});
 
 	test("preserves a pre-existing codev.json backup across repeated runs", async () => {

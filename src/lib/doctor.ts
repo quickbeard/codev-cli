@@ -1444,7 +1444,7 @@ const gatewayKeyCheck: Check = {
 				detail: "Skipped — the gateway URL could not be fetched.",
 			};
 		}
-		const attempt = { url: `${ctx.gatewayUrl}/key/info`, method: "GET" };
+		const attempt = { url: `${ctx.gatewayUrl}/v1/models`, method: "GET" };
 		return guard(attempt, async () => {
 			const ok = await validateApiKey(ctx.apiKey as string, ctx.gatewayUrl);
 			return ok
@@ -1487,8 +1487,8 @@ const modelsCheck: Check = {
 	},
 };
 
-// The only check that proves inference is actually permitted: /key/info and
-// /v1/models both succeed for a key that is then 403'd on every completion.
+// The only check that proves inference is actually permitted: /v1/models
+// succeeds for a key that is then 403'd on every completion.
 const completionCheck: Check = {
 	key: "llm-completion",
 	label: "Send a test request to the LLM",

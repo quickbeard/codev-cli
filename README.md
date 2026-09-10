@@ -40,8 +40,7 @@ It is read-only (it installs and configures nothing) and checks, in order:
   backend (used by `codevhub upload`).
 - **LLM access** — the key is valid, models are listable, and a real one-token
   completion succeeds. Only the last of these proves inference is permitted;
-  `/key/info` and `/v1/models` both pass for a key that is then 403'd on every
-  completion.
+  `/v1/models` passes for a key that is then 403'd on every completion.
 - **This machine** — what is already installed, configured, and backed up.
 
 Failures expand in place into what happened, the most likely cause given your
